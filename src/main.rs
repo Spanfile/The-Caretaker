@@ -1,21 +1,12 @@
-mod commands;
 mod logging;
+mod management;
 
 use std::collections::HashSet;
 
-use commands::management::*;
 use log::*;
+use management::Management;
 use serde::Deserialize;
-use serenity::{
-    async_trait,
-    framework::{standard::macros::group, StandardFramework},
-    http::Http,
-    model::prelude::*,
-    prelude::*,
-    Client,
-};
-
-const COMMAND_PREFIX: &str = "-ct ";
+use serenity::{async_trait, http::Http, model::prelude::*, prelude::*, Client};
 
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -23,16 +14,13 @@ struct Config {
     log_level: logging::LogLevel,
 }
 
-#[group]
-#[commands(ping)]
-struct Management;
-
 struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, _ctx: Context, ready: Ready) {
         info!("Connected as {}", ready.user.name);
+        debug!("{:#?}", ready);
     }
 }
 
@@ -53,14 +41,12 @@ async fn main() -> anyhow::Result<()> {
         (owners, info.id)
     })?;
 
-    let framework = StandardFramework::new()
-        .configure(|c| c.owners(owners).prefix(COMMAND_PREFIX))
-        .group(&MANAGEMENT_GROUP);
+    let mgmt = Management::new();
 
     let mut client = Client::new(&config.discord_token)
         .token(&config.discord_token)
-        .framework(framework)
         .event_handler(Handler)
+        .framework(mgmt)
         .await?;
 
     tokio::select! {
