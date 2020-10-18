@@ -1,10 +1,11 @@
-use crate::ShardMetadata;
+use crate::{module::Module, ShardMetadata};
 use chrono::Utc;
 use log::*;
 use serenity::{
     async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
 };
 use structopt::{clap, StructOpt};
+use strum::VariantNames;
 
 pub const COMMAND_PREFIX: &str = "-ct";
 
@@ -24,6 +25,25 @@ enum Command {
     Status,
     /// Deliberately returns an error
     Fail,
+    /// Configure the various Caretaker modules
+    Module {
+        /// The name of the module to configure
+        #[structopt(possible_values(Module::VARIANTS))]
+        module: Module,
+        #[structopt(subcommand)]
+        subcommand: ModuleSubcommand,
+    },
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(no_version)]
+enum ModuleSubcommand {
+    /// Enable this module
+    Enable,
+    /// Disable this module
+    Disable,
+    /// Get this module's status
+    Status,
 }
 
 #[async_trait]
@@ -128,6 +148,7 @@ impl Command {
                 }
             }
             Command::Fail => return Err(anyhow::anyhow!("a deliberate error")),
+            Command::Module { module, subcommand } => {}
         };
 
         Ok(())

@@ -1,5 +1,6 @@
 mod logging;
 mod management;
+mod module;
 
 use log::*;
 use management::Management;
