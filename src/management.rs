@@ -38,18 +38,18 @@ enum Command {
 #[derive(StructOpt, Debug)]
 #[structopt(no_version)]
 enum ModuleSubcommand {
-    /// Enable this module
+    /// Enable the given module
     Enable,
-    /// Disable this module
+    /// Disable the given module
     Disable,
-    /// Get this module's status
+    /// Get the given module's status
     Status,
 }
 
 #[async_trait]
 impl Framework for Management {
     async fn dispatch(&self, ctx: Context, msg: Message) {
-        info!("Dispatch called: '{}' by {}", msg.content, msg.author);
+        info!("Dispatch called: '{:?}' by {}", msg.content, msg.author);
         debug!("{:#?}", msg);
 
         match self.process_message(&ctx, &msg).await {
@@ -111,6 +111,7 @@ impl Management {
 impl Command {
     async fn run(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         match self {
+            Command::Fail => return Err(anyhow::anyhow!("a deliberate error")),
             Command::Status => {
                 let data = ctx.data.read().await;
                 if let Some(shards) = data.get::<ShardMetadata>() {
@@ -147,9 +148,20 @@ impl Command {
                     warn!("Missing shard metadata collection in context userdata");
                 }
             }
-            Command::Fail => return Err(anyhow::anyhow!("a deliberate error")),
-            Command::Module { module, subcommand } => {}
+            Command::Module { module, subcommand } => subcommand.run(*module, ctx, msg).await?,
         };
+
+        Ok(())
+    }
+}
+
+impl ModuleSubcommand {
+    async fn run(&self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        match self {
+            ModuleSubcommand::Enable => {}
+            ModuleSubcommand::Disable => {}
+            ModuleSubcommand::Status => {}
+        }
 
         Ok(())
     }
@@ -162,6 +174,7 @@ where
     m.embed(|e| {
         e.title("An internal error has occurred")
             .description(format_args!("```\n{}\n```", err.as_ref()))
+            .timestamp(&Utc::now())
             .colour(Colour::RED)
     });
 }

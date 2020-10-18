@@ -1,13 +1,21 @@
+// ew what is this, rust 2015?
+#[macro_use]
+extern crate diesel;
+
 mod logging;
 mod management;
+mod models;
 mod module;
+mod schema;
 
+use diesel::{prelude::*, sqlite::SqliteConnection};
 use log::*;
 use management::Management;
 use serde::Deserialize;
 use serenity::{async_trait, http::Http, model::prelude::*, prelude::*, Client};
 use std::{
     collections::{HashMap, HashSet},
+    sync::Arc,
     time::Duration,
 };
 use tokio::time;
@@ -20,6 +28,7 @@ struct Config {
     discord_token: String,
     log_level: logging::LogLevel,
     latency_update_freq_ms: u64,
+    database_url: String,
 }
 
 impl Default for Config {
@@ -27,14 +36,30 @@ impl Default for Config {
         Self {
             discord_token: Default::default(),
             log_level: Default::default(),
+            database_url: Default::default(),
             // serenity seems to update a shard's latency every 40 seconds so round it up to a nice one minute
             latency_update_freq_ms: 60_000,
         }
     }
 }
 
-struct Handler;
+#[derive(Debug, Default)]
+struct ShardMetadata {
+    id: u64,
+    guilds: usize,
+    latency: Option<Duration>,
+}
 
+impl TypeMapKey for ShardMetadata {
+    type Value = HashMap<u64, ShardMetadata>;
+}
+
+struct DbConnection {}
+impl TypeMapKey for DbConnection {
+    type Value = Arc<Mutex<SqliteConnection>>;
+}
+
+struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
@@ -76,17 +101,6 @@ impl EventHandler for Handler {
     }
 }
 
-#[derive(Debug, Default)]
-struct ShardMetadata {
-    id: u64,
-    guilds: usize,
-    latency: Option<Duration>,
-}
-
-impl TypeMapKey for ShardMetadata {
-    type Value = HashMap<u64, ShardMetadata>;
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
@@ -96,6 +110,10 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting...");
     debug!("{:#?}", config);
 
+    debug!("Establishing database connection to {}...", config.database_url);
+    let db_conn = SqliteConnection::establish(&config.database_url)?;
+
+    debug!("Initialising Discord client...");
     let http = Http::new_with_token(&config.discord_token);
     let (owners, bot_id) = http.get_current_application_info().await.map(|info| {
         let mut owners = HashSet::new();
@@ -117,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
     {
         let mut data = client.data.write().await;
         data.insert::<ShardMetadata>(Default::default());
+        data.insert::<DbConnection>(Arc::new(Mutex::new(db_conn)));
     }
 
     let shard_manager = client.shard_manager.clone();
@@ -147,6 +166,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    debug!("Starting autosharded...");
     tokio::select! {
         res = client.start_autosharded() => {
             info!("Client returned");
