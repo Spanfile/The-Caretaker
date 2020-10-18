@@ -12,6 +12,12 @@ pub enum LogLevel {
     Trace,
 }
 
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self::Info
+    }
+}
+
 impl From<LogLevel> for LevelFilter {
     fn from(level: LogLevel) -> Self {
         match level {

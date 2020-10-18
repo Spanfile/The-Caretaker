@@ -1,3 +1,5 @@
+use crate::ShardMetadata;
+use chrono::Utc;
 use log::*;
 use serenity::{
     async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
@@ -27,11 +29,8 @@ impl Framework for Management {
                 if let Err(e) = msg
                     .channel_id
                     .send_message(&ctx.http, |m| {
-                        m.embed(|e| {
-                            e.title("An internal error has occurred")
-                                .description(err)
-                                .colour(Colour::RED)
-                        })
+                        internal_error_message(err, m);
+                        m
                     })
                     .await
                 {
@@ -67,9 +66,41 @@ impl Management {
             };
 
             debug!("{:#?}", command);
+            match command {
+                Command::Status => {
+                    let data = ctx.data.read().await;
+                    if let Some(shards) = data.get::<ShardMetadata>() {
+                        if let Some(own_shard) = shards.get(&ctx.shard_id) {
+                            msg.channel_id
+                                .send_message(&ctx.http, |m| {
+                                    m.embed(|e| {
+                                        e.field("Shard", format_args!("{}/{}", own_shard.id + 1, shards.len()), true);
+                                        e.field("Guilds", format_args!("{}", own_shard.guilds), true);
 
-            let msg_builder = command.run()?;
-            msg.channel_id.send_message(&ctx.http, msg_builder).await?;
+                                        if let Some(latency) = own_shard.latency {
+                                            e.field(
+                                                "GW latency",
+                                                format_args!("{}ms", latency.as_micros() as f32 / 1000f32),
+                                                true,
+                                            );
+                                        } else {
+                                            e.field("GW latency", "n/a", true);
+                                        }
+
+                                        // the serenity docs state that `You can also pass an instance of
+                                        // chrono::DateTime<Utc>, which will construct the timestamp string out of it.`,
+                                        // but serenity itself implements the
+                                        // conversion only for references to datetimes, not
+                                        // datetimes directly
+                                        e.timestamp(&Utc::now());
+                                        e
+                                    })
+                                })
+                                .await?;
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -80,10 +111,13 @@ impl Management {
     }
 }
 
-impl Command {
-    fn run<'a, 'b>(&self) -> anyhow::Result<Box<dyn FnOnce(&'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a>>> {
-        match self {
-            Command::Status => Ok(Box::new(|m| m)),
-        }
-    }
+fn internal_error_message<E>(err: E, m: &mut CreateMessage<'_>)
+where
+    E: AsRef<dyn std::error::Error>,
+{
+    m.embed(|e| {
+        e.title("An internal error has occurred")
+            .description(err.as_ref())
+            .colour(Colour::RED)
+    });
 }
