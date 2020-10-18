@@ -13,5 +13,5 @@ fern = "0.6.0"
 log = "0.4.11"
 serde = {version = "1.0.116", features = ["derive"]}
 serenity = "0.9.0-rc.2"
-structopt = "0.3.20"
+structopt = {version = "0.3.20", default-features = false}
 tokio = {version = "0.2.22", features = ["macros"]}

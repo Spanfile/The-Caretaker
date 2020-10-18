@@ -11,6 +11,8 @@ use std::{
 };
 use tokio::time;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 struct Config {
@@ -44,6 +46,15 @@ impl EventHandler for Handler {
                 shards,
                 ready.guilds.len()
             );
+
+            ctx.set_activity(Activity::playing(&format!(
+                "{} [{}] [{}/{}]",
+                management::COMMAND_PREFIX,
+                VERSION,
+                shard + 1,
+                shards
+            )))
+            .await;
 
             let mut data = ctx.data.write().await;
             if let Some(shard_meta) = data.get_mut::<ShardMetadata>() {
