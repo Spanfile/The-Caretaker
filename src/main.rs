@@ -74,30 +74,39 @@ impl EventHandler for Handler {
                 ready.guilds.len()
             );
 
-            ctx.set_activity(Activity::playing(&format!(
-                "{} [{}] [{}/{}]",
-                management::COMMAND_PREFIX,
-                VERSION,
-                shard + 1,
-                shards
-            )))
-            .await;
-
-            let mut data = ctx.data.write().await;
-            if let Some(shard_meta) = data.get_mut::<ShardMetadata>() {
-                shard_meta.insert(
-                    shard,
-                    ShardMetadata {
-                        id: shard,
-                        guilds: ready.guilds.len(),
-                        latency: None,
-                    },
-                );
-            } else {
-                warn!("No shard collection in context userdata");
-            }
+            Handler::set_info_activity(&ctx, shard, shards).await;
+            Handler::insert_shard_metadata(&ctx, shard, ready.guilds.len()).await;
         } else {
             warn!("Session ready, but shard was None");
+        }
+    }
+}
+
+impl Handler {
+    async fn set_info_activity(ctx: &Context, shard: u64, shards: u64) {
+        ctx.set_activity(Activity::playing(&format!(
+            "{} [{}] [{}/{}]",
+            management::COMMAND_PREFIX,
+            VERSION,
+            shard + 1,
+            shards
+        )))
+        .await;
+    }
+
+    async fn insert_shard_metadata(ctx: &Context, shard: u64, guilds: usize) {
+        let mut data = ctx.data.write().await;
+        if let Some(shard_meta) = data.get_mut::<ShardMetadata>() {
+            shard_meta.insert(
+                shard,
+                ShardMetadata {
+                    id: shard,
+                    guilds,
+                    latency: None,
+                },
+            );
+        } else {
+            warn!("No shard collection in context userdata");
         }
     }
 }
@@ -142,6 +151,7 @@ async fn main() -> anyhow::Result<()> {
     let shard_manager = client.shard_manager.clone();
     let client_data = client.data.clone();
     tokio::spawn(async move {
+        debug!("Starting shard latency update ticker");
         loop {
             time::delay_for(Duration::from_millis(config.latency_update_freq_ms)).await;
 

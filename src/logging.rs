@@ -1,6 +1,7 @@
 use fern::Dispatch;
 use log::LevelFilter;
 use serde::Deserialize;
+use std::time::Instant;
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -31,8 +32,17 @@ impl From<LogLevel> for LevelFilter {
 }
 
 pub fn setup_logging(log_level: LogLevel) -> anyhow::Result<()> {
+    let start = Instant::now();
     let mut dispatch = Dispatch::new()
-        .format(move |out, msg, record| out.finish(format_args!("{{{}}} {} {}", record.target(), record.level(), msg)))
+        .format(move |out, msg, record| {
+            out.finish(format_args!(
+                "{: >11.3} {: >5} [{}] {}",
+                start.elapsed().as_secs_f32(),
+                record.level(),
+                record.target(),
+                msg
+            ))
+        })
         .level(log_level.into())
         .chain(std::io::stdout());
 
