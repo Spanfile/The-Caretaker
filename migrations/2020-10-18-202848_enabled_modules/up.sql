@@ -1,6 +1,6 @@
 CREATE TABLE "enabled_modules" (
-	"guild" INTEGER NOT NULL,
+	"guild" BIGINT NOT NULL,
 	"module" TEXT NOT NULL,
-	"enabled" INTEGER NOT NULL,
+	"enabled" BOOLEAN NOT NULL,
 	PRIMARY KEY("guild", "module")
 );

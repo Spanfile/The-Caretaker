@@ -2,13 +2,14 @@
 #[macro_use]
 extern crate diesel;
 
+mod error;
 mod logging;
 mod management;
 mod models;
 mod module;
 mod schema;
 
-use diesel::{prelude::*, sqlite::SqliteConnection};
+use diesel::{pg::PgConnection, prelude::*};
 use log::*;
 use management::Management;
 use serde::Deserialize;
@@ -56,7 +57,7 @@ impl TypeMapKey for ShardMetadata {
 
 struct DbConnection {}
 impl TypeMapKey for DbConnection {
-    type Value = Arc<Mutex<SqliteConnection>>;
+    type Value = Arc<Mutex<PgConnection>>;
 }
 
 struct Handler;
@@ -111,7 +112,7 @@ async fn main() -> anyhow::Result<()> {
     debug!("{:#?}", config);
 
     debug!("Establishing database connection to {}...", config.database_url);
-    let db_conn = SqliteConnection::establish(&config.database_url)?;
+    let db_conn = PgConnection::establish(&config.database_url)?;
 
     debug!("Initialising Discord client...");
     let http = Http::new_with_token(&config.discord_token);

@@ -1,4 +1,4 @@
-use crate::{module::Module, ShardMetadata};
+use crate::{error::CaretakerError, module::Module, DbConnection, ShardMetadata};
 use chrono::Utc;
 use log::*;
 use serenity::{
@@ -8,6 +8,8 @@ use structopt::{clap, StructOpt};
 use strum::VariantNames;
 
 pub const COMMAND_PREFIX: &str = "-ct";
+const UNICODE_CHECK: char = '\u{2705}';
+const UNICODE_CROSS: char = '\u{274C}';
 
 pub struct Management {}
 
@@ -28,8 +30,14 @@ enum Command {
     /// Configure the various Caretaker modules
     Module {
         /// The name of the module to configure
-        #[structopt(possible_values(Module::VARIANTS))]
-        module: Module,
+        #[structopt(
+            possible_values(Module::VARIANTS),
+            required_ifs(&[
+                ("subcommand", "enable"),
+                ("subcommand", "disable")
+            ])
+        )]
+        module: Option<Module>,
         #[structopt(subcommand)]
         subcommand: ModuleSubcommand,
     },
@@ -42,7 +50,7 @@ enum ModuleSubcommand {
     Enable,
     /// Disable the given module
     Disable,
-    /// Get the given module's status
+    /// Show the status of the given module, or if no module is given, show the status for all the modules
     Status,
 }
 
@@ -58,7 +66,7 @@ impl Framework for Management {
                 warn!("Message processing failed: {}", err);
                 if let Err(e) = msg
                     .channel_id
-                    .send_message(&ctx.http, |m| {
+                    .send_message(&ctx, |m| {
                         internal_error_message(err, m);
                         m
                     })
@@ -87,7 +95,7 @@ impl Management {
                 Err(clap::Error { kind, message, .. }) => {
                     warn!("structopt returned {:?} error: {}", kind, message);
                     msg.channel_id
-                        .send_message(&ctx.http, |m| {
+                        .send_message(&ctx, |m| {
                             codeblock_message(&message, m);
                             m
                         })
@@ -111,44 +119,57 @@ impl Management {
 impl Command {
     async fn run(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         match self {
-            Command::Fail => return Err(anyhow::anyhow!("a deliberate error")),
+            Command::Fail => return Err(CaretakerError::DeliberateError.into()),
             Command::Status => {
                 let data = ctx.data.read().await;
-                if let Some(shards) = data.get::<ShardMetadata>() {
-                    if let Some(own_shard) = shards.get(&ctx.shard_id) {
-                        msg.channel_id
-                            .send_message(&ctx.http, |m| {
-                                m.embed(|e| {
-                                    e.field("Shard", format_args!("{}/{}", own_shard.id + 1, shards.len()), true);
-                                    e.field("Guilds", format_args!("{}", own_shard.guilds), true);
+                match data.get::<ShardMetadata>() {
+                    None => return Err(CaretakerError::NoShardMetadataCollection.into()),
+                    Some(shards) => {
+                        match shards.get(&ctx.shard_id) {
+                            None => return Err(CaretakerError::MissingOwnShardMetadata(ctx.shard_id).into()),
+                            Some(own_shard) => {
+                                msg.channel_id
+                                    .send_message(&ctx, |m| {
+                                        m.embed(|e| {
+                                            e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
+                                            e.field("Guilds", format!("{}", own_shard.guilds), true);
 
-                                    if let Some(latency) = own_shard.latency {
-                                        e.field(
-                                            "GW latency",
-                                            format_args!("{}ms", latency.as_micros() as f32 / 1000f32),
-                                            true,
-                                        );
-                                    } else {
-                                        e.field("GW latency", "n/a", true);
-                                    }
+                                            if let Some(latency) = own_shard.latency {
+                                                e.field(
+                                                    "GW latency",
+                                                    format!("{}ms", latency.as_micros() as f32 / 1000f32),
+                                                    true,
+                                                );
+                                            } else {
+                                                e.field("GW latency", "n/a", true);
+                                            }
 
-                                    // the serenity docs state that `You can also pass an instance of
-                                    // chrono::DateTime<Utc>, which will construct the timestamp string out of it.`, but
-                                    // serenity itself implements the conversion only for references to datetimes, not
-                                    // datetimes directly
-                                    e.timestamp(&Utc::now());
-                                    e
-                                })
-                            })
-                            .await?;
-                    } else {
-                        warn!("Missing shard metadata for own shard {}", ctx.shard_id);
+                                            // the serenity docs state that `You can also pass an instance of
+                                            // chrono::DateTime<Utc>, which will construct the timestamp string out of
+                                            // it.`, but serenity itself
+                                            // implements the conversion
+                                            // only for references to datetimes, not
+                                            // datetimes directly
+                                            e.timestamp(&Utc::now());
+                                            e
+                                        })
+                                    })
+                                    .await?;
+                            }
+                        }
                     }
-                } else {
-                    warn!("Missing shard metadata collection in context userdata");
                 }
             }
-            Command::Module { module, subcommand } => subcommand.run(*module, ctx, msg).await?,
+            Command::Module { module, subcommand } => match (module, subcommand) {
+                (Some(module), subcommand) => subcommand.run(*module, ctx, msg).await?,
+                (None, ModuleSubcommand::Status) => {
+                    info!("yay status");
+                }
+                (m, s) => panic!(
+                    "impossible case while running module subcommand: module is {:?} and subcommand is {:?}",
+                    m, s
+                ),
+            },
         };
 
         Ok(())
@@ -157,10 +178,39 @@ impl Command {
 
 impl ModuleSubcommand {
     async fn run(&self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        let data = ctx.data.read().await;
+        let db = data
+            .get::<DbConnection>()
+            .ok_or(CaretakerError::NoDatabaseConnection)?
+            .lock()
+            .await;
+        let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
+
         match self {
-            ModuleSubcommand::Enable => {}
-            ModuleSubcommand::Disable => {}
-            ModuleSubcommand::Status => {}
+            ModuleSubcommand::Enable => {
+                module.set_enabled_for_guild(guild_id as i64, true, &db)?;
+                react_success(ctx, msg).await?;
+            }
+            ModuleSubcommand::Disable => {
+                module.set_enabled_for_guild(guild_id as i64, false, &db)?;
+                react_success(ctx, msg).await?;
+            }
+            ModuleSubcommand::Status => {
+                let enabled = module.get_enabled_for_guild(guild_id as i64, &db)?;
+                msg.channel_id
+                    .send_message(&ctx, |m| {
+                        m.content(format!(
+                            "The `{}` module is: {}",
+                            module.to_string(),
+                            if enabled {
+                                format!("{} enabled", UNICODE_CHECK)
+                            } else {
+                                format!("{} disabled", UNICODE_CROSS)
+                            }
+                        ))
+                    })
+                    .await?;
+            }
         }
 
         Ok(())
@@ -173,12 +223,17 @@ where
 {
     m.embed(|e| {
         e.title("An internal error has occurred")
-            .description(format_args!("```\n{}\n```", err.as_ref()))
+            .description(format!("```\n{}\n```", err.as_ref()))
             .timestamp(&Utc::now())
             .colour(Colour::RED)
     });
 }
 
 fn codeblock_message(message: &str, m: &mut CreateMessage<'_>) {
-    m.content(format_args!("```\n{}\n```", message));
+    m.content(format!("```\n{}\n```", message));
+}
+
+async fn react_success(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    msg.react(ctx, UNICODE_CHECK).await?;
+    Ok(())
 }

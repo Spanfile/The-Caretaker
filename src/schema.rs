@@ -1,7 +1,7 @@
 table! {
     enabled_modules (guild, module) {
-        guild -> Integer,
+        guild -> Int8,
         module -> Text,
-        enabled -> Integer,
+        enabled -> Bool,
     }
 }
