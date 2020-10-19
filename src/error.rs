@@ -12,4 +12,6 @@ pub enum CaretakerError {
     NoShardMetadataCollection,
     #[error("Missing own shard ID {0} metadata in shard metadata collection")]
     MissingOwnShardMetadata(u64),
+    #[error("Missing field '{0}' in model")]
+    MissingField(&'static str),
 }

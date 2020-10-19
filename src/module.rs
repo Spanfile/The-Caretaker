@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+pub mod action;
 
-use crate::{models, schema};
+use crate::{error::CaretakerError, models, schema};
+use action::Action;
 use diesel::{prelude::*, PgConnection};
 use log::*;
-use std::str::FromStr;
+use serenity::model::id::ChannelId;
+use std::{collections::HashMap, str::FromStr};
 use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 
 #[derive(Debug, EnumString, EnumVariantNames, EnumIter, Display, Copy, Clone, Eq, PartialEq, Hash)]
@@ -68,5 +70,34 @@ impl Module {
             .optional()?;
 
         Ok(enable_status.unwrap_or(false))
+    }
+
+    pub fn get_actions_for_guild(&self, guild: i64, db: &PgConnection) -> anyhow::Result<Vec<Action>> {
+        use schema::actions;
+
+        let mut actions = Vec::new();
+        for action_model in actions::table
+            .filter(actions::guild.eq(guild).and(actions::module.eq(self.to_string())))
+            .load::<models::Action>(db)?
+        {
+            // strum's from_str impl returns the proper variant, but with all fields set to their default values (where
+            // could it get values for 'em anyways?)
+            match Action::from_str(&action_model.action)? {
+                Action::RemoveMessage => actions.push(Action::RemoveMessage),
+                Action::NotifyUser { .. } => actions.push(Action::NotifyUser {
+                    message: action_model.message.ok_or(CaretakerError::MissingField("message"))?,
+                }),
+                Action::NotifyIn { .. } => actions.push(Action::NotifyIn {
+                    channel: ChannelId(
+                        action_model
+                            .in_channel
+                            .ok_or(CaretakerError::MissingField("in_channel"))? as u64,
+                    ),
+                    message: action_model.message.ok_or(CaretakerError::MissingField("message"))?,
+                }),
+            }
+        }
+
+        Ok(actions)
     }
 }

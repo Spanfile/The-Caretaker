@@ -1,11 +1,15 @@
-use crate::{error::CaretakerError, module::Module, DbConnection, ShardMetadata};
+use crate::{
+    error::CaretakerError,
+    module::{action::Action, Module},
+    DbConnection, ShardMetadata,
+};
 use chrono::Utc;
 use log::*;
 use serenity::{
     async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
 };
 use structopt::{clap, StructOpt};
-use strum::VariantNames;
+use strum::{EnumMessage, VariantNames};
 
 pub const COMMAND_PREFIX: &str = "-ct";
 const UNICODE_CHECK: char = '\u{2705}';
@@ -55,6 +59,16 @@ enum ModuleSubcommand {
     /// Show the enabled status of the given module, or if no module is given, show the enabled statuses for all the
     /// modules
     GetEnabled,
+    /// Shows all actions associated with the given module
+    ListActions,
+    /// Adds a new action to the given module
+    AddAction,
+    /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
+    /// indices
+    RemoveAction {
+        /// The index of the action to remove
+        index: usize,
+    },
 }
 
 #[async_trait]
@@ -225,7 +239,7 @@ impl ModuleSubcommand {
             ModuleSubcommand::GetEnabled => {
                 let enabled = module.get_enabled_for_guild(guild_id as i64, &db)?;
                 msg.channel_id
-                    .send_message(&ctx, |m| {
+                    .send_message(ctx, |m| {
                         m.content(format!(
                             "The `{}` module is: {}",
                             module.to_string(),
@@ -234,6 +248,49 @@ impl ModuleSubcommand {
                     })
                     .await?;
             }
+            ModuleSubcommand::ListActions => {
+                let actions = module.get_actions_for_guild(guild_id as i64, &db)?;
+                msg.channel_id
+                    .send_message(ctx, |m| {
+                        if actions.is_empty() {
+                            m.content(
+                                "There aren't any actions defined for this module. Add some with the `add-action` \
+                                 subcommand!",
+                            )
+                        } else {
+                            m.embed(|e| {
+                                for (idx, action) in actions.iter().enumerate() {
+                                    let name = format!(
+                                        "{}: {}",
+                                        idx,
+                                        action.get_message().expect("missing message for action")
+                                    );
+
+                                    match action {
+                                        Action::NotifyUser { message } => {
+                                            e.field(name, format!("With: '{}'", message), false)
+                                        }
+                                        Action::NotifyIn { channel, message } => {
+                                            e.field(name, format!("In {}, with: '{}'", channel, message), false)
+                                        }
+                                        Action::RemoveMessage => {
+                                            // Discord requires the embed field to always have *some* value but they
+                                            // don't document the requirement anywhere. omitting the value has Discord
+                                            // respond with a very unhelpful error message that Serenity can't do
+                                            // anything with, other than complain about invalid JSON
+                                            e.field(name, "Remove the message, nothing special about it", false)
+                                        }
+                                    };
+                                }
+
+                                e
+                            })
+                        }
+                    })
+                    .await?;
+            }
+            ModuleSubcommand::AddAction => {}
+            ModuleSubcommand::RemoveAction { index } => {}
         }
 
         Ok(())
