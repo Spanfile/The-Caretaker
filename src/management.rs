@@ -6,7 +6,12 @@ use crate::{
 use chrono::Utc;
 use log::*;
 use serenity::{
-    async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
+    async_trait,
+    builder::CreateMessage,
+    client::Context,
+    framework::Framework,
+    model::{channel::Message, id::ChannelId},
+    utils::Colour,
 };
 use structopt::{clap, StructOpt};
 use strum::{EnumMessage, VariantNames};
@@ -17,7 +22,7 @@ const UNICODE_CROSS: char = '\u{274C}';
 
 pub struct Management {}
 
-#[derive(StructOpt, Debug, Copy, Clone)]
+#[derive(StructOpt, Debug)]
 #[structopt(
     global_settings(&[clap::AppSettings::NoBinaryName,
         clap::AppSettings::DisableHelpFlags,
@@ -47,7 +52,7 @@ enum Command {
     },
 }
 
-#[derive(StructOpt, Debug, Copy, Clone)]
+#[derive(StructOpt, Debug)]
 #[structopt(no_version)]
 enum ModuleSubcommand {
     /// Enables or disables the given module
@@ -62,7 +67,11 @@ enum ModuleSubcommand {
     /// Shows all actions associated with the given module
     ListActions,
     /// Adds a new action to the given module
-    AddAction,
+    AddAction {
+        action: Action,
+        channel: ChannelId,
+        message: String,
+    },
     /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
     /// indices
     RemoveAction {
@@ -148,7 +157,7 @@ impl Management {
 }
 
 impl Command {
-    async fn run(self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
 
         match self {
@@ -187,7 +196,7 @@ impl Command {
                     .await?;
             }
             Command::Module { module, subcommand } => match (module, subcommand) {
-                (Some(module), subcommand) => subcommand.run(module, ctx, msg).await?,
+                (Some(module), subcommand) => subcommand.run(*module, ctx, msg).await?,
                 (None, ModuleSubcommand::GetEnabled) => {
                     let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
                     let db = data
@@ -222,7 +231,7 @@ impl Command {
 }
 
 impl ModuleSubcommand {
-    async fn run(self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(&self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
@@ -233,7 +242,7 @@ impl ModuleSubcommand {
 
         match self {
             ModuleSubcommand::SetEnabled { enabled } => {
-                module.set_enabled_for_guild(guild_id as i64, enabled, &db)?;
+                module.set_enabled_for_guild(guild_id as i64, *enabled, &db)?;
                 react_success(ctx, msg).await?;
             }
             ModuleSubcommand::GetEnabled => {
@@ -289,7 +298,11 @@ impl ModuleSubcommand {
                     })
                     .await?;
             }
-            ModuleSubcommand::AddAction => {}
+            ModuleSubcommand::AddAction {
+                action,
+                channel,
+                message,
+            } => {}
             ModuleSubcommand::RemoveAction { index } => {}
         }
 

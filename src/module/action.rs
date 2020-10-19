@@ -2,6 +2,7 @@ use serenity::model::id::ChannelId;
 use strum::{EnumMessage, EnumString};
 
 #[derive(Debug, EnumString, EnumMessage)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Action {
     #[strum(message = "Remove the user's message")]
     RemoveMessage,
