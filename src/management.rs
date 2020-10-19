@@ -13,7 +13,7 @@ const UNICODE_CROSS: char = '\u{274C}';
 
 pub struct Management {}
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Copy, Clone)]
 #[structopt(
     global_settings(&[clap::AppSettings::NoBinaryName,
         clap::AppSettings::DisableHelpFlags,
@@ -43,15 +43,18 @@ enum Command {
     },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Copy, Clone)]
 #[structopt(no_version)]
 enum ModuleSubcommand {
-    /// Enable the given module
-    Enable,
-    /// Disable the given module
-    Disable,
-    /// Show the status of the given module, or if no module is given, show the status for all the modules
-    Status,
+    /// Enables or disables the given module
+    SetEnabled {
+        /// Boolean value indicating if the module is enabled or not
+        #[structopt(parse(try_from_str))]
+        enabled: bool,
+    },
+    /// Show the enabled status of the given module, or if no module is given, show the enabled statuses for all the
+    /// modules
+    GetEnabled,
 }
 
 #[async_trait]
@@ -89,11 +92,18 @@ impl Management {
             return Ok(());
         }
 
+        let guild = if let Some(guild) = msg.guild(ctx).await {
+            guild
+        } else {
+            // no guild: the message was probably a DM
+            return Ok(());
+        };
+
         if let Some(command) = msg.content.strip_prefix(COMMAND_PREFIX) {
             let command = match Command::from_iter_safe(command.split_whitespace()) {
                 Ok(c) => c,
                 Err(clap::Error { kind, message, .. }) => {
-                    warn!("structopt returned {:?} error: {}", kind, message);
+                    warn!("structopt returned {:?} error: {:?}", kind, message);
                     msg.channel_id
                         .send_message(&ctx, |m| {
                             codeblock_message(&message, m);
@@ -104,7 +114,14 @@ impl Management {
                 }
             };
 
-            debug!("{:#?}", command);
+            info!(
+                "{} ({}) in '{}' ({:?}): {:?}",
+                msg.author.tag(),
+                msg.author,
+                guild.name,
+                guild.id,
+                command
+            );
             command.run(ctx, msg).await?;
         }
 
@@ -117,53 +134,67 @@ impl Management {
 }
 
 impl Command {
-    async fn run(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        let data = ctx.data.read().await;
+
         match self {
             Command::Fail => return Err(CaretakerError::DeliberateError.into()),
             Command::Status => {
-                let data = ctx.data.read().await;
-                match data.get::<ShardMetadata>() {
-                    None => return Err(CaretakerError::NoShardMetadataCollection.into()),
-                    Some(shards) => {
-                        match shards.get(&ctx.shard_id) {
-                            None => return Err(CaretakerError::MissingOwnShardMetadata(ctx.shard_id).into()),
-                            Some(own_shard) => {
-                                msg.channel_id
-                                    .send_message(&ctx, |m| {
-                                        m.embed(|e| {
-                                            e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
-                                            e.field("Guilds", format!("{}", own_shard.guilds), true);
+                let shards = data
+                    .get::<ShardMetadata>()
+                    .ok_or(CaretakerError::NoShardMetadataCollection)?;
+                let own_shard = shards
+                    .get(&ctx.shard_id)
+                    .ok_or(CaretakerError::MissingOwnShardMetadata(ctx.shard_id))?;
 
-                                            if let Some(latency) = own_shard.latency {
-                                                e.field(
-                                                    "GW latency",
-                                                    format!("{}ms", latency.as_micros() as f32 / 1000f32),
-                                                    true,
-                                                );
-                                            } else {
-                                                e.field("GW latency", "n/a", true);
-                                            }
+                msg.channel_id
+                    .send_message(&ctx, |m| {
+                        m.embed(|e| {
+                            e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
+                            e.field("Guilds", format!("{}", own_shard.guilds), true);
 
-                                            // the serenity docs state that `You can also pass an instance of
-                                            // chrono::DateTime<Utc>, which will construct the timestamp string out of
-                                            // it.`, but serenity itself
-                                            // implements the conversion
-                                            // only for references to datetimes, not
-                                            // datetimes directly
-                                            e.timestamp(&Utc::now());
-                                            e
-                                        })
-                                    })
-                                    .await?;
+                            if let Some(latency) = own_shard.latency {
+                                e.field(
+                                    "GW latency",
+                                    format!("{}ms", latency.as_micros() as f32 / 1000f32),
+                                    true,
+                                );
+                            } else {
+                                e.field("GW latency", "n/a", true);
                             }
-                        }
-                    }
-                }
+
+                            // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
+                            // which will construct the timestamp string out of it.`, but serenity itself implements the
+                            // conversion only for references to datetimes, not datetimes directly
+                            e.timestamp(&Utc::now());
+                            e
+                        })
+                    })
+                    .await?;
             }
             Command::Module { module, subcommand } => match (module, subcommand) {
-                (Some(module), subcommand) => subcommand.run(*module, ctx, msg).await?,
-                (None, ModuleSubcommand::Status) => {
-                    info!("yay status");
+                (Some(module), subcommand) => subcommand.run(module, ctx, msg).await?,
+                (None, ModuleSubcommand::GetEnabled) => {
+                    let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
+                    let db = data
+                        .get::<DbConnection>()
+                        .ok_or(CaretakerError::NoDatabaseConnection)?
+                        .lock()
+                        .await;
+                    let modules = Module::get_all_modules_for_guild(guild_id as i64, &db)?;
+
+                    msg.channel_id
+                        .send_message(&ctx, |m| {
+                            m.embed(|e| {
+                                e.title("Status of all modules");
+
+                                for (module, enabled) in modules {
+                                    e.field(module, enabled_string(enabled), true);
+                                }
+                                e
+                            })
+                        })
+                        .await?;
                 }
                 (m, s) => panic!(
                     "impossible case while running module subcommand: module is {:?} and subcommand is {:?}",
@@ -177,7 +208,7 @@ impl Command {
 }
 
 impl ModuleSubcommand {
-    async fn run(&self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
@@ -187,26 +218,18 @@ impl ModuleSubcommand {
         let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
 
         match self {
-            ModuleSubcommand::Enable => {
-                module.set_enabled_for_guild(guild_id as i64, true, &db)?;
+            ModuleSubcommand::SetEnabled { enabled } => {
+                module.set_enabled_for_guild(guild_id as i64, enabled, &db)?;
                 react_success(ctx, msg).await?;
             }
-            ModuleSubcommand::Disable => {
-                module.set_enabled_for_guild(guild_id as i64, false, &db)?;
-                react_success(ctx, msg).await?;
-            }
-            ModuleSubcommand::Status => {
+            ModuleSubcommand::GetEnabled => {
                 let enabled = module.get_enabled_for_guild(guild_id as i64, &db)?;
                 msg.channel_id
                     .send_message(&ctx, |m| {
                         m.content(format!(
                             "The `{}` module is: {}",
                             module.to_string(),
-                            if enabled {
-                                format!("{} enabled", UNICODE_CHECK)
-                            } else {
-                                format!("{} disabled", UNICODE_CROSS)
-                            }
+                            enabled_string(enabled)
                         ))
                     })
                     .await?;
@@ -236,4 +259,12 @@ fn codeblock_message(message: &str, m: &mut CreateMessage<'_>) {
 async fn react_success(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     msg.react(ctx, UNICODE_CHECK).await?;
     Ok(())
+}
+
+fn enabled_string(enabled: bool) -> String {
+    if enabled {
+        format!("{} enabled", UNICODE_CHECK)
+    } else {
+        format!("{} disabled", UNICODE_CROSS)
+    }
 }

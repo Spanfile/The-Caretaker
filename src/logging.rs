@@ -35,11 +35,18 @@ pub fn setup_logging(log_level: LogLevel) -> anyhow::Result<()> {
     let start = Instant::now();
     let mut dispatch = Dispatch::new()
         .format(move |out, msg, record| {
+            let mut target = record.target().to_string();
+            if target.starts_with("the_caretaker") {
+                target = String::new();
+            } else {
+                target = format!("[{}] ", target);
+            }
+
             out.finish(format_args!(
-                "{: >11.3} {: >5} [{}] {}",
+                "{: >11.3} {: >5} {}{}",
                 start.elapsed().as_secs_f32(),
                 record.level(),
-                record.target(),
+                target,
                 msg
             ))
         })
