@@ -6,12 +6,7 @@ use crate::{
 use chrono::Utc;
 use log::*;
 use serenity::{
-    async_trait,
-    builder::CreateMessage,
-    client::Context,
-    framework::Framework,
-    model::{channel::Message, id::ChannelId},
-    utils::Colour,
+    async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
 };
 use structopt::{clap, StructOpt};
 use strum::{EnumMessage, VariantNames};
@@ -68,9 +63,9 @@ enum ModuleSubcommand {
     ListActions,
     /// Adds a new action to the given module
     AddAction {
+        /// The action to add
+        #[structopt(subcommand)]
         action: Action,
-        channel: ChannelId,
-        message: String,
     },
     /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
     /// indices
@@ -298,12 +293,14 @@ impl ModuleSubcommand {
                     })
                     .await?;
             }
-            ModuleSubcommand::AddAction {
-                action,
-                channel,
-                message,
-            } => {}
-            ModuleSubcommand::RemoveAction { index } => {}
+            ModuleSubcommand::AddAction { action } => {
+                module.add_action_for_guild(guild_id as i64, action, &db)?;
+                react_success(ctx, msg).await?;
+            }
+            ModuleSubcommand::RemoveAction { index } => {
+                module.remove_nth_action_for_guild(guild_id as i64, *index, &db)?;
+                react_success(ctx, msg).await?;
+            }
         }
 
         Ok(())

@@ -8,7 +8,7 @@ pub struct ModuleEnableStatus {
     pub enabled: bool,
 }
 
-#[derive(Queryable, Insertable, Debug)]
+#[derive(Queryable, Debug)]
 pub struct Action {
     pub id: i32,
     pub guild: i64,
@@ -16,4 +16,14 @@ pub struct Action {
     pub action: String,
     pub in_channel: Option<i64>,
     pub message: Option<String>,
+}
+
+#[derive(Insertable, Debug)]
+#[table_name = "actions"]
+pub struct NewAction<'a> {
+    pub guild: i64,
+    pub module: &'a str,
+    pub action: &'a String,
+    pub in_channel: Option<i64>,
+    pub message: Option<&'a String>,
 }

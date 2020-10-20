@@ -100,4 +100,59 @@ impl Module {
 
         Ok(actions)
     }
+
+    pub fn add_action_for_guild(&self, guild: i64, action: &Action, db: &PgConnection) -> anyhow::Result<i32> {
+        use schema::actions;
+
+        let action_str = action.to_string();
+        let module_str = self.to_string();
+
+        let action_model = match action {
+            Action::RemoveMessage => models::NewAction {
+                guild,
+                action: &action_str,
+                module: &module_str,
+                in_channel: None,
+                message: None,
+            },
+            Action::NotifyUser { message } => models::NewAction {
+                guild,
+                action: &action_str,
+                module: &module_str,
+                in_channel: None,
+                message: Some(message),
+            },
+            Action::NotifyIn { channel, message } => models::NewAction {
+                guild,
+                action: &action_str,
+                module: &module_str,
+                in_channel: Some(channel.0 as i64),
+                message: Some(message),
+            },
+        };
+
+        let id: i32 = diesel::insert_into(actions::table)
+            .values(&action_model)
+            .returning(actions::id)
+            .get_result(db)?;
+        debug!("{:?} -> ID {}", action_model, id);
+        Ok(id)
+    }
+
+    pub fn remove_nth_action_for_guild(&self, guild: i64, n: usize, db: &PgConnection) -> anyhow::Result<()> {
+        use schema::actions;
+
+        let actions = actions::table
+            .filter(actions::guild.eq(guild).and(actions::module.eq(self.to_string())))
+            .load::<models::Action>(db)?;
+        let delete = actions.get(n).ok_or(CaretakerError::IndexOutOfRange(n))?;
+
+        // return the deleted row's ID but don't store it anywhere, because this way diesel will error if the delete
+        // affected no rows
+        diesel::delete(actions::table.filter(actions::id.eq(delete.id)))
+            .returning(actions::id)
+            .get_result::<i32>(db)?;
+        debug!("Delete {:?}", delete);
+        Ok(())
+    }
 }

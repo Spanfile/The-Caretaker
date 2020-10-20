@@ -14,4 +14,6 @@ pub enum CaretakerError {
     MissingOwnShardMetadata(u64),
     #[error("Missing field '{0}' in model")]
     MissingField(&'static str),
+    #[error("The index {0} is out of range")]
+    IndexOutOfRange(usize),
 }
