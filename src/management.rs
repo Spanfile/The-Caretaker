@@ -272,10 +272,10 @@ impl ModuleSubcommand {
 
                                     match action {
                                         Action::NotifyUser { message } => {
-                                            e.field(name, format!("With: '{}'", message), false)
+                                            e.field(name, format!("With `{}`", message), false)
                                         }
                                         Action::NotifyIn { channel, message } => {
-                                            e.field(name, format!("In {}, with: '{}'", channel, message), false)
+                                            e.field(name, format!("In <#{}>, with `{}`", channel, message), false)
                                         }
                                         Action::RemoveMessage => {
                                             // Discord requires the embed field to always have *some* value but they
