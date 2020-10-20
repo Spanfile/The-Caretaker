@@ -118,7 +118,7 @@ impl Management {
         };
 
         if let Some(command) = msg.content.strip_prefix(COMMAND_PREFIX) {
-            let command = match Command::from_iter_safe(command.split_whitespace()) {
+            let command = match Command::from_iter_safe(shellwords::split(command)?) {
                 Ok(c) => c,
                 Err(clap::Error { kind, message, .. }) => {
                     warn!("structopt returned {:?} error: {:?}", kind, message);
