@@ -3,6 +3,7 @@ use structopt::StructOpt;
 use strum::{Display, EnumMessage, EnumString};
 
 #[derive(Debug, EnumString, EnumMessage, StructOpt, Display)]
+#[structopt(no_version)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Action {
     /// Remove the user's message

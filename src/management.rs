@@ -60,8 +60,16 @@ enum ModuleSubcommand {
     /// modules
     GetEnabled,
     /// Shows all actions associated with the given module
+    ///
+    /// The actions aren't dependent on each other and will run in parallel, so their exact order doesn't matter. The
+    /// same kind of action can exist multiple times, even with the same parameters, with the exception of the
+    /// `remove-message`-action.
     ListActions,
     /// Adds a new action to the given module
+    ///
+    /// The action may have additional required parameters. See their help with `add-action help <action>`. The same
+    /// kind of action can be added multiple times, even with the same parameters as an already existing action, with
+    /// the exception of the `remove-message`-action.
     AddAction {
         /// The action to add
         #[structopt(subcommand)]
@@ -263,6 +271,7 @@ impl ModuleSubcommand {
                             )
                         } else {
                             m.embed(|e| {
+                                e.title(format!("Actions for the `{}` module", module));
                                 for (idx, action) in actions.iter().enumerate() {
                                     let name = format!(
                                         "{}: {}",
