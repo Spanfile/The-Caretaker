@@ -1,6 +1,8 @@
 // ew what is this, rust 2015?
 #[macro_use]
 extern crate diesel;
+#[macro_use]
+extern crate diesel_migrations;
 
 mod error;
 mod logging;
@@ -22,6 +24,8 @@ use std::{
 use tokio::time;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+embed_migrations!();
 
 #[derive(Deserialize, Debug)]
 #[serde(default)]
@@ -122,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
 
     debug!("Establishing database connection to {}...", config.database_url);
     let db_conn = PgConnection::establish(&config.database_url)?;
+    embedded_migrations::run(&db_conn)?;
 
     debug!("Initialising Discord client...");
     let http = Http::new_with_token(&config.discord_token);
