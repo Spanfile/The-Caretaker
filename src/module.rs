@@ -1,11 +1,12 @@
 pub mod action;
 
+use self::action::ActionKind;
 use crate::{error::CaretakerError, models, schema};
 use action::Action;
 use diesel::{prelude::*, PgConnection};
 use log::*;
 use serenity::model::id::ChannelId;
-use std::{collections::HashMap, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
 use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 
 #[derive(Debug, EnumString, EnumVariantNames, EnumIter, Display, Copy, Clone, Eq, PartialEq, Hash)]
@@ -13,6 +14,7 @@ use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 pub enum Module {
     MassPing,
     Crosspost,
+    DynamicSlowmode,
 }
 
 impl Module {
@@ -82,52 +84,38 @@ impl Module {
         {
             // strum's from_str impl returns the proper variant, but with all fields set to their default values (where
             // could it get values for 'em anyways?)
-            match Action::from_str(&action_model.action)? {
-                Action::RemoveMessage => actions.push(Action::RemoveMessage),
-                Action::NotifyUser { .. } => actions.push(Action::NotifyUser {
-                    message: action_model.message.ok_or(CaretakerError::MissingField("message"))?,
-                }),
-                Action::NotifyIn { .. } => actions.push(Action::NotifyIn {
-                    channel: ChannelId(
-                        action_model
-                            .in_channel
-                            .ok_or(CaretakerError::MissingField("in_channel"))? as u64,
-                    ),
-                    message: action_model.message.ok_or(CaretakerError::MissingField("message"))?,
-                }),
+            match ActionKind::from_str(&action_model.action)? {
+                ActionKind::RemoveMessage => actions.push(Action::remove_message()),
+                ActionKind::Notify { .. } => actions.push(Action::notify(
+                    action_model.in_channel.map(|c| ChannelId(c as u64)),
+                    Cow::Owned(action_model.message.ok_or(CaretakerError::MissingField("message"))?),
+                )),
             }
         }
 
         Ok(actions)
     }
 
-    pub fn add_action_for_guild(&self, guild: i64, action: &Action, db: &PgConnection) -> anyhow::Result<i32> {
+    pub fn add_action_for_guild(&self, guild: i64, action: Action, db: &PgConnection) -> anyhow::Result<i32> {
         use schema::actions;
 
-        let action_str = action.to_string();
+        let action_str = action.kind.to_string();
         let module_str = self.to_string();
 
-        let action_model = match action {
-            Action::RemoveMessage => models::NewAction {
+        let action_model = match action.kind {
+            ActionKind::RemoveMessage => models::NewAction {
                 guild,
                 action: &action_str,
                 module: &module_str,
                 in_channel: None,
                 message: None,
             },
-            Action::NotifyUser { message } => models::NewAction {
+            ActionKind::Notify => models::NewAction {
                 guild,
                 action: &action_str,
                 module: &module_str,
-                in_channel: None,
-                message: Some(message),
-            },
-            Action::NotifyIn { channel, message } => models::NewAction {
-                guild,
-                action: &action_str,
-                module: &module_str,
-                in_channel: Some(channel.0 as i64),
-                message: Some(message),
+                in_channel: action.channel.map(|c| c.0 as i64),
+                message: action.message.as_deref(),
             },
         };
 

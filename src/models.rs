@@ -23,7 +23,7 @@ pub struct Action {
 pub struct NewAction<'a> {
     pub guild: i64,
     pub module: &'a str,
-    pub action: &'a String,
+    pub action: &'a str,
     pub in_channel: Option<i64>,
-    pub message: Option<&'a String>,
+    pub message: Option<&'a str>,
 }

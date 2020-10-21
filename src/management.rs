@@ -1,13 +1,22 @@
 use crate::{
     error::CaretakerError,
-    module::{action::Action, Module},
+    module::{
+        action::{Action, ActionKind},
+        Module,
+    },
     DbConnection, ShardMetadata,
 };
 use chrono::Utc;
 use log::*;
 use serenity::{
-    async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
+    async_trait,
+    builder::CreateMessage,
+    client::Context,
+    framework::Framework,
+    model::{channel::Message, id::ChannelId},
+    utils::Colour,
 };
+use std::borrow::Cow;
 use structopt::{clap, StructOpt};
 use strum::{EnumMessage, VariantNames};
 
@@ -72,8 +81,12 @@ enum ModuleSubcommand {
     /// the exception of the `remove-message`-action.
     AddAction {
         /// The action to add
-        #[structopt(subcommand)]
-        action: Action,
+        action: ActionKind,
+        /// The channel to send the message to, if applicable.
+        in_channel: Option<ChannelId>,
+        /// The message to send, if applicable.
+        #[structopt(required_if("action", "notify"))]
+        message: Option<String>,
     },
     /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
     /// indices
@@ -276,17 +289,35 @@ impl ModuleSubcommand {
                                     let name = format!(
                                         "{}: {}",
                                         idx,
-                                        action.get_message().expect("missing message for action")
+                                        action.kind.get_message().expect("missing message for action")
                                     );
 
-                                    match action {
-                                        Action::NotifyUser { message } => {
-                                            e.field(name, format!("With `{}`", message), false)
+                                    match action.kind {
+                                        ActionKind::Notify => {
+                                            if let Some(message) = &action.message {
+                                                if let Some(channel) = action.channel {
+                                                    e.field(
+                                                        name,
+                                                        format!("In <#{}> with `{}`", channel, message),
+                                                        false,
+                                                    )
+                                                } else {
+                                                    e.field(
+                                                        name,
+                                                        format!("In the same channel with `{}`", message),
+                                                        false,
+                                                    )
+                                                }
+                                            } else {
+                                                warn!(
+                                                    "While listing actions, the action {:?} for guild {} had no \
+                                                     message specified",
+                                                    action, guild_id
+                                                );
+                                                e.field(name, "No message specified! This shouldn't happen!", false)
+                                            }
                                         }
-                                        Action::NotifyIn { channel, message } => {
-                                            e.field(name, format!("In <#{}>, with `{}`", channel, message), false)
-                                        }
-                                        Action::RemoveMessage => {
+                                        ActionKind::RemoveMessage => {
                                             // Discord requires the embed field to always have *some* value but they
                                             // don't document the requirement anywhere. omitting the value has Discord
                                             // respond with a very unhelpful error message that Serenity can't do
@@ -302,7 +333,21 @@ impl ModuleSubcommand {
                     })
                     .await?;
             }
-            ModuleSubcommand::AddAction { action } => {
+            ModuleSubcommand::AddAction {
+                action,
+                in_channel,
+                message,
+            } => {
+                let action = match action {
+                    ActionKind::Notify { .. } => Action::notify(
+                        *in_channel,
+                        message
+                            .as_deref()
+                            .map(|s| Cow::Borrowed(s))
+                            .expect("message is None while ActionKind is Notify. this shouldn't happen"),
+                    ),
+                    ActionKind::RemoveMessage => Action::remove_message(),
+                };
                 module.add_action_for_guild(guild_id as i64, action, &db)?;
                 react_success(ctx, msg).await?;
             }
