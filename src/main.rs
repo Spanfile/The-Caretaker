@@ -15,7 +15,10 @@ use diesel::{pg::PgConnection, prelude::*};
 use log::*;
 use management::Management;
 use serde::Deserialize;
-use serenity::{async_trait, http::Http, model::prelude::*, prelude::*, Client};
+use serenity::{
+    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, http::Http, model::prelude::*, prelude::*,
+    Client,
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -83,6 +86,23 @@ impl EventHandler for Handler {
         } else {
             warn!("Session ready, but shard was None");
         }
+    }
+
+    async fn resume(&self, _: Context, resume: ResumedEvent) {
+        info!("Resumed");
+        debug!("{:#?}", resume);
+    }
+
+    async fn shard_stage_update(&self, _: Context, update: ShardStageUpdateEvent) {
+        info!(
+            "Shard {} transitioned from {} to {}",
+            update.shard_id, update.old, update.new
+        );
+    }
+
+    async fn cache_ready(&self, _: Context, guilds: Vec<GuildId>) {
+        info!("Cache ready. {} guilds", guilds.len());
+        debug!("{:?}", guilds);
     }
 }
 
@@ -174,7 +194,13 @@ async fn main() -> anyhow::Result<()> {
                 debug!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
 
                 if let Some(meta) = shard_meta_collection.get_mut(&id.0) {
-                    meta.latency = runner.latency;
+                    match (meta.latency, runner.latency) {
+                        (_, Some(latency)) => meta.latency = Some(latency),
+                        (Some(prev), None) => {
+                            warn!("Missing latency update for shard {} (previous latency {:?})", id, prev)
+                        }
+                        (None, None) => warn!("Missing first latency update for shard {}", id),
+                    }
                 } else {
                     warn!("No metadata object for shard {} found", id);
                 }

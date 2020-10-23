@@ -82,11 +82,12 @@ enum ModuleSubcommand {
     AddAction {
         /// The action to add
         action: ActionKind,
-        /// The channel to send the message to, if applicable.
-        in_channel: Option<ChannelId>,
         /// The message to send, if applicable.
         #[structopt(required_if("action", "notify"))]
         message: Option<String>,
+        /// The channel to send the message to, if applicable.
+        #[structopt(long = "in")]
+        in_channel: Option<ChannelId>,
     },
     /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
     /// indices
@@ -308,13 +309,13 @@ impl ModuleSubcommand {
                                                         name,
                                                         format!("In <#{}> with `{}`", channel, message),
                                                         false,
-                                                    )
+                                                    );
                                                 } else {
                                                     e.field(
                                                         name,
                                                         format!("In the same channel with `{}`", message),
                                                         false,
-                                                    )
+                                                    );
                                                 }
                                             } else {
                                                 warn!(
@@ -323,7 +324,7 @@ impl ModuleSubcommand {
                                                     action,
                                                     module.guild(),
                                                 );
-                                                e.field(name, "No message specified! This shouldn't happen!", false)
+                                                e.field(name, "No message specified! This shouldn't happen!", false);
                                             }
                                         }
                                         ActionKind::RemoveMessage => {
@@ -331,9 +332,9 @@ impl ModuleSubcommand {
                                             // don't document the requirement anywhere. omitting the value has Discord
                                             // respond with a very unhelpful error message that Serenity can't do
                                             // anything with, other than complain about invalid JSON
-                                            e.field(name, "Remove the message, nothing special about it", false)
+                                            e.field(name, "Remove the message, nothing special about it", false);
                                         }
-                                    };
+                                    }
                                 }
 
                                 e
