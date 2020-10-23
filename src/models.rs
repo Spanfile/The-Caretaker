@@ -1,10 +1,10 @@
-use super::schema::{actions, enabled_modules};
+use super::schema::{actions, module_settings};
+use crate::module::{action::ActionKind, ModuleKind};
 
-#[derive(Queryable, Insertable, Debug)]
-#[table_name = "enabled_modules"]
-pub struct ModuleEnableStatus {
+#[derive(Queryable, Insertable, AsChangeset, Debug)]
+pub struct ModuleSetting {
     pub guild: i64,
-    pub module: String,
+    pub module: ModuleKind,
     pub enabled: bool,
 }
 
@@ -12,8 +12,8 @@ pub struct ModuleEnableStatus {
 pub struct Action {
     pub id: i32,
     pub guild: i64,
-    pub module: String,
-    pub action: String,
+    pub module: ModuleKind,
+    pub action: ActionKind,
     pub in_channel: Option<i64>,
     pub message: Option<String>,
 }
@@ -22,8 +22,8 @@ pub struct Action {
 #[table_name = "actions"]
 pub struct NewAction<'a> {
     pub guild: i64,
-    pub module: &'a str,
-    pub action: &'a str,
+    pub module: ModuleKind,
+    pub action: ActionKind,
     pub in_channel: Option<i64>,
     pub message: Option<&'a str>,
 }

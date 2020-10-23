@@ -1,119 +1,187 @@
 pub mod action;
 
-use self::action::ActionKind;
+use self::action::{Action, ActionKind};
 use crate::{error::CaretakerError, models, schema};
-use action::Action;
 use diesel::{prelude::*, PgConnection};
+use diesel_derive_enum::DbEnum;
 use log::*;
-use serenity::model::id::ChannelId;
-use std::{borrow::Cow, collections::HashMap, str::FromStr};
+use serenity::model::id::{ChannelId, GuildId};
+use std::{borrow::Cow, collections::HashMap};
 use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 
-#[derive(Debug, EnumString, EnumVariantNames, EnumIter, Display, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, EnumString, EnumVariantNames, EnumIter, Display, Copy, Clone, Eq, PartialEq, Hash, DbEnum)]
 #[strum(serialize_all = "kebab-case")]
-pub enum Module {
+#[DieselType = "Module_kind"]
+pub enum ModuleKind {
     MassPing,
     Crosspost,
     DynamicSlowmode,
+    EmojiSpam,
+    MentionSpam,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Module {
+    guild: GuildId,
+    kind: ModuleKind,
+    enabled: bool,
+}
+
+impl From<models::ModuleSetting> for Module {
+    fn from(m: models::ModuleSetting) -> Self {
+        Self {
+            guild: GuildId(m.guild as u64),
+            kind: m.module,
+            enabled: m.enabled,
+        }
+    }
 }
 
 impl Module {
-    pub fn get_all_modules_for_guild(guild: i64, db: &PgConnection) -> anyhow::Result<HashMap<Module, bool>> {
-        use schema::enabled_modules;
+    fn default_for_kind_with_guild(kind: ModuleKind, guild: GuildId) -> Self {
+        match kind {
+            ModuleKind::MassPing => Self {
+                guild,
+                kind,
+                enabled: false,
+            },
+            ModuleKind::Crosspost => Self {
+                guild,
+                kind,
+                enabled: false,
+            },
+            ModuleKind::DynamicSlowmode => Self {
+                guild,
+                kind,
+                enabled: false,
+            },
+            ModuleKind::EmojiSpam => Self {
+                guild,
+                kind,
+                enabled: false,
+            },
+            ModuleKind::MentionSpam => Self {
+                guild,
+                kind,
+                enabled: false,
+            },
+        }
+    }
+
+    pub fn get_all_modules_for_guild(guild: GuildId, db: &PgConnection) -> anyhow::Result<HashMap<ModuleKind, Module>> {
+        use schema::module_settings;
 
         let mut modules = HashMap::new();
-        for m in Module::iter() {
-            modules.insert(m, false);
+        for kind in ModuleKind::iter() {
+            modules.insert(kind, Module::default_for_kind_with_guild(kind, guild));
         }
 
-        let enabled_modules = enabled_modules::table
-            .filter(enabled_modules::guild.eq(guild).and(enabled_modules::enabled.eq(true)))
-            .select(enabled_modules::module)
-            .load::<String>(db)?;
-
-        for enabled_module in &enabled_modules {
-            modules.insert(Module::from_str(enabled_module)?, true);
+        for m in module_settings::table
+            .filter(module_settings::guild.eq(guild.0 as i64))
+            .load::<models::ModuleSetting>(db)?
+        {
+            modules.insert(m.module, m.into());
         }
 
+        debug!("{:#?}", modules);
         Ok(modules)
     }
 
-    pub fn set_enabled_for_guild(&self, guild: i64, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
-        use models::ModuleEnableStatus;
-        use schema::enabled_modules;
+    pub fn get_module_for_guild(guild: GuildId, kind: ModuleKind, db: &PgConnection) -> anyhow::Result<Module> {
+        use schema::module_settings;
 
-        let module_enabled = ModuleEnableStatus {
-            guild,
+        let module = module_settings::table
+            .filter(
+                module_settings::guild
+                    .eq(guild.0 as i64)
+                    .and(module_settings::module.eq(kind)),
+            )
+            .first::<models::ModuleSetting>(db)
+            .optional()?
+            .map_or_else(|| Module::default_for_kind_with_guild(kind, guild), Module::from);
+
+        debug!("{:#?}", module);
+        Ok(module)
+    }
+
+    pub fn kind(self) -> ModuleKind {
+        self.kind
+    }
+
+    pub fn guild(self) -> GuildId {
+        self.guild
+    }
+
+    pub fn enabled(self) -> bool {
+        self.enabled
+    }
+
+    pub fn set_enabled(self, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
+        use schema::module_settings;
+
+        let enabled_setting = models::ModuleSetting {
+            guild: self.guild.0 as i64,
+            module: self.kind,
             enabled,
-            module: self.to_string(),
         };
 
-        let rows = diesel::insert_into(enabled_modules::table)
-            .values(&module_enabled)
-            .on_conflict((enabled_modules::guild, enabled_modules::module))
+        // return the inserted row's guild ID but don't store it anywhere, because this way diesel will error if the
+        // insert affected no rows
+        diesel::insert_into(module_settings::table)
+            .values(&enabled_setting)
+            .on_conflict((module_settings::guild, module_settings::module))
             .do_update()
-            .set(enabled_modules::enabled.eq(enabled))
-            .execute(db)?;
-        debug!("{:?} -> {} rows", module_enabled, rows);
+            .set(&enabled_setting)
+            .returning(module_settings::guild)
+            .get_result::<i64>(db)?;
+
+        debug!("Insert {:#?}", enabled_setting);
         Ok(())
     }
 
-    pub fn get_enabled_for_guild(&self, guild: i64, db: &PgConnection) -> anyhow::Result<bool> {
-        use schema::enabled_modules;
-
-        let enable_status = enabled_modules::table
-            .filter(
-                enabled_modules::guild
-                    .eq(guild)
-                    .and(enabled_modules::module.eq(self.to_string())),
-            )
-            .select(enabled_modules::enabled)
-            .first(db)
-            .optional()?;
-
-        Ok(enable_status.unwrap_or(false))
-    }
-
-    pub fn get_actions_for_guild(&self, guild: i64, db: &PgConnection) -> anyhow::Result<Vec<Action>> {
+    pub fn get_actions(self, db: &PgConnection) -> anyhow::Result<Vec<Action>> {
         use schema::actions;
 
         let mut actions = Vec::new();
-        for action_model in actions::table
-            .filter(actions::guild.eq(guild).and(actions::module.eq(self.to_string())))
+        for model in actions::table
+            .filter(
+                actions::guild
+                    .eq(self.guild.0 as i64)
+                    .and(actions::module.eq(self.kind)),
+            )
             .load::<models::Action>(db)?
         {
-            // strum's from_str impl returns the proper variant, but with all fields set to their default values (where
-            // could it get values for 'em anyways?)
-            match ActionKind::from_str(&action_model.action)? {
+            match model.action {
                 ActionKind::RemoveMessage => actions.push(Action::remove_message()),
-                ActionKind::Notify { .. } => actions.push(Action::notify(
-                    action_model.in_channel.map(|c| ChannelId(c as u64)),
-                    Cow::Owned(action_model.message.ok_or(CaretakerError::MissingField("message"))?),
+                ActionKind::Notify => actions.push(Action::notify(
+                    model.in_channel.map(|c| ChannelId(c as u64)),
+                    model
+                        .message
+                        .map(Cow::Owned)
+                        .ok_or(CaretakerError::MissingField("message"))?,
                 )),
             }
         }
 
+        debug!("{:#?}", actions);
         Ok(actions)
     }
 
-    pub fn add_action_for_guild(&self, guild: i64, action: Action, db: &PgConnection) -> anyhow::Result<i32> {
+    pub fn add_action(self, action: Action, db: &PgConnection) -> anyhow::Result<i32> {
         use schema::actions;
-
-        let action_str = action.kind.to_string();
-        let module_str = self.to_string();
 
         let action_model = match action.kind {
             ActionKind::RemoveMessage => models::NewAction {
-                guild,
-                action: &action_str,
-                module: &module_str,
+                guild: self.guild.0 as i64,
+                action: action.kind,
+                module: self.kind,
                 in_channel: None,
                 message: None,
             },
             ActionKind::Notify => models::NewAction {
-                guild,
-                action: &action_str,
-                module: &module_str,
+                guild: self.guild.0 as i64,
+                action: action.kind,
+                module: self.kind,
                 in_channel: action.channel.map(|c| c.0 as i64),
                 message: action.message.as_deref(),
             },
@@ -123,15 +191,20 @@ impl Module {
             .values(&action_model)
             .returning(actions::id)
             .get_result(db)?;
-        debug!("{:?} -> ID {}", action_model, id);
+
+        debug!("Insert {:?} -> ID {}", action_model, id);
         Ok(id)
     }
 
-    pub fn remove_nth_action_for_guild(&self, guild: i64, n: usize, db: &PgConnection) -> anyhow::Result<()> {
+    pub fn remove_nth_action(self, n: usize, db: &PgConnection) -> anyhow::Result<()> {
         use schema::actions;
 
         let actions = actions::table
-            .filter(actions::guild.eq(guild).and(actions::module.eq(self.to_string())))
+            .filter(
+                actions::guild
+                    .eq(self.guild.0 as i64)
+                    .and(actions::module.eq(self.kind)),
+            )
             .load::<models::Action>(db)?;
         let delete = actions.get(n).ok_or(CaretakerError::IndexOutOfRange(n))?;
 
@@ -140,6 +213,7 @@ impl Module {
         diesel::delete(actions::table.filter(actions::id.eq(delete.id)))
             .returning(actions::id)
             .get_result::<i32>(db)?;
+
         debug!("Delete {:?}", delete);
         Ok(())
     }

@@ -1,9 +1,11 @@
+use diesel_derive_enum::DbEnum;
 use serenity::model::id::ChannelId;
 use std::borrow::Cow;
 use strum::{Display, EnumMessage, EnumString};
 
-#[derive(Debug, EnumString, EnumMessage, Display, Copy, Clone)]
+#[derive(Debug, EnumString, EnumMessage, Display, Copy, Clone, DbEnum)]
 #[strum(serialize_all = "kebab-case")]
+#[DieselType = "Action_kind"]
 pub enum ActionKind {
     /// Remove the user's message
     #[strum(message = "Remove the user's message")]

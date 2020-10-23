@@ -2,7 +2,7 @@ use crate::{
     error::CaretakerError,
     module::{
         action::{Action, ActionKind},
-        Module,
+        Module, ModuleKind,
     },
     DbConnection, ShardMetadata,
 };
@@ -44,13 +44,13 @@ enum Command {
     Module {
         /// The name of the module to configure
         #[structopt(
-            possible_values(Module::VARIANTS),
+            possible_values(ModuleKind::VARIANTS),
             required_ifs(&[
                 ("subcommand", "enable"),
                 ("subcommand", "disable")
             ])
         )]
-        module: Option<Module>,
+        module: Option<ModuleKind>,
         #[structopt(subcommand)]
         subcommand: ModuleSubcommand,
     },
@@ -73,7 +73,7 @@ enum ModuleSubcommand {
     /// The actions aren't dependent on each other and will run in parallel, so their exact order doesn't matter. The
     /// same kind of action can exist multiple times, even with the same parameters, with the exception of the
     /// `remove-message`-action.
-    ListActions,
+    GetActions,
     /// Adds a new action to the given module
     ///
     /// The action may have additional required parameters. See their help with `add-action help <action>`. The same
@@ -173,7 +173,7 @@ impl Management {
 }
 
 impl Command {
-    async fn run(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
 
         match self {
@@ -211,35 +211,45 @@ impl Command {
                     })
                     .await?;
             }
-            Command::Module { module, subcommand } => match (module, subcommand) {
-                (Some(module), subcommand) => subcommand.run(*module, ctx, msg).await?,
-                (None, ModuleSubcommand::GetEnabled) => {
-                    let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
-                    let db = data
-                        .get::<DbConnection>()
-                        .ok_or(CaretakerError::NoDatabaseConnection)?
-                        .lock()
-                        .await;
-                    let modules = Module::get_all_modules_for_guild(guild_id as i64, &db)?;
+            Command::Module { module, subcommand } => {
+                let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?;
+                let db = data
+                    .get::<DbConnection>()
+                    .ok_or(CaretakerError::NoDatabaseConnection)?
+                    .lock()
+                    .await;
 
-                    msg.channel_id
-                        .send_message(&ctx, |m| {
-                            m.embed(|e| {
-                                e.title("Status of all modules");
+                match (module, subcommand) {
+                    (Some(module), subcommand) => {
+                        let module = Module::get_module_for_guild(guild_id, module, &db)?;
+                        // drop our lock to the db so the subcommand can retrieve its own lock to it when it needs.
+                        // do this instead of just passing the connection as a reference, since the *reference* cannot
+                        // be held between await points
+                        drop(db);
+                        subcommand.run(module, ctx, msg).await?;
+                    }
+                    (None, ModuleSubcommand::GetEnabled) => {
+                        let modules = Module::get_all_modules_for_guild(guild_id, &db)?;
 
-                                for (module, enabled) in modules {
-                                    e.field(module, enabled_string(enabled), true);
-                                }
-                                e
+                        msg.channel_id
+                            .send_message(&ctx, |m| {
+                                m.embed(|e| {
+                                    e.title("Status of all modules");
+
+                                    for (kind, module) in modules {
+                                        e.field(kind, enabled_string(module.enabled()), true);
+                                    }
+                                    e
+                                })
                             })
-                        })
-                        .await?;
-                }
-                (m, s) => panic!(
-                    "impossible case while running module subcommand: module is {:?} and subcommand is {:?}",
-                    m, s
-                ),
-            },
+                            .await?;
+                    }
+                    (m, s) => panic!(
+                        "impossible case while running module subcommand: module is {:?} and subcommand is {:?}",
+                        m, s
+                    ),
+                };
+            }
         };
 
         Ok(())
@@ -247,34 +257,32 @@ impl Command {
 }
 
 impl ModuleSubcommand {
-    async fn run(&self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
             .ok_or(CaretakerError::NoDatabaseConnection)?
             .lock()
             .await;
-        let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?.0;
 
         match self {
             ModuleSubcommand::SetEnabled { enabled } => {
-                module.set_enabled_for_guild(guild_id as i64, *enabled, &db)?;
+                module.set_enabled(enabled, &db)?;
                 react_success(ctx, msg).await?;
             }
             ModuleSubcommand::GetEnabled => {
-                let enabled = module.get_enabled_for_guild(guild_id as i64, &db)?;
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.content(format!(
                             "The `{}` module is: {}",
-                            module.to_string(),
-                            enabled_string(enabled)
+                            module.kind(),
+                            enabled_string(module.enabled())
                         ))
                     })
                     .await?;
             }
-            ModuleSubcommand::ListActions => {
-                let actions = module.get_actions_for_guild(guild_id as i64, &db)?;
+            ModuleSubcommand::GetActions => {
+                let actions = module.get_actions(&db)?;
                 msg.channel_id
                     .send_message(ctx, |m| {
                         if actions.is_empty() {
@@ -284,8 +292,8 @@ impl ModuleSubcommand {
                             )
                         } else {
                             m.embed(|e| {
-                                e.title(format!("Actions for the `{}` module", module));
-                                for (idx, action) in actions.iter().enumerate() {
+                                e.title(format!("Actions for the `{}` module", module.kind()));
+                                for (idx, action) in actions.into_iter().enumerate() {
                                     let name = format!(
                                         "{}: {}",
                                         idx,
@@ -294,7 +302,7 @@ impl ModuleSubcommand {
 
                                     match action.kind {
                                         ActionKind::Notify => {
-                                            if let Some(message) = &action.message {
+                                            if let Some(message) = action.message {
                                                 if let Some(channel) = action.channel {
                                                     e.field(
                                                         name,
@@ -312,7 +320,8 @@ impl ModuleSubcommand {
                                                 warn!(
                                                     "While listing actions, the action {:?} for guild {} had no \
                                                      message specified",
-                                                    action, guild_id
+                                                    action,
+                                                    module.guild(),
                                                 );
                                                 e.field(name, "No message specified! This shouldn't happen!", false)
                                             }
@@ -340,7 +349,7 @@ impl ModuleSubcommand {
             } => {
                 let action = match action {
                     ActionKind::Notify { .. } => Action::notify(
-                        *in_channel,
+                        in_channel,
                         message
                             .as_deref()
                             .map(|s| Cow::Borrowed(s))
@@ -348,11 +357,11 @@ impl ModuleSubcommand {
                     ),
                     ActionKind::RemoveMessage => Action::remove_message(),
                 };
-                module.add_action_for_guild(guild_id as i64, action, &db)?;
+                module.add_action(action, &db)?;
                 react_success(ctx, msg).await?;
             }
             ModuleSubcommand::RemoveAction { index } => {
-                module.remove_nth_action_for_guild(guild_id as i64, *index, &db)?;
+                module.remove_nth_action(index, &db)?;
                 react_success(ctx, msg).await?;
             }
         }
