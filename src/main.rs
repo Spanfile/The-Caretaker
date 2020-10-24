@@ -75,10 +75,11 @@ impl EventHandler for Handler {
         if let Some(s) = ready.shard {
             let (shard, shards) = (s[0], s[1]);
             info!(
-                "Shard {}/{} ready! # of guilds: {}",
+                "Shard {}/{} ready! # of guilds: {}. Session ID: {}",
                 shard + 1,
                 shards,
-                ready.guilds.len()
+                ready.guilds.len(),
+                ready.session_id,
             );
 
             Handler::set_info_activity(&ctx, shard, shards).await;
