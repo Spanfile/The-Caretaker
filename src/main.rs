@@ -162,7 +162,7 @@ async fn main() -> anyhow::Result<()> {
     debug!("Owners: {:#?}", owners);
 
     let mgmt = Management::new();
-    let mut client = Client::new(&config.discord_token)
+    let mut client = Client::builder(&config.discord_token)
         .token(&config.discord_token)
         .event_handler(Handler)
         .framework(mgmt)
