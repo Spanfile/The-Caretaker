@@ -3,6 +3,7 @@ use serenity::model::id::ChannelId;
 use std::borrow::Cow;
 use strum::{Display, EnumMessage, EnumString};
 
+// the database schema holds its own version of this enum, remember to modify it as well if modying this one
 #[derive(Debug, EnumString, EnumMessage, Display, Copy, Clone, DbEnum)]
 #[strum(serialize_all = "kebab-case")]
 #[DieselType = "Action_kind"]
@@ -36,6 +37,28 @@ impl<'a> Action<'a> {
             kind: ActionKind::Notify,
             channel,
             message: Some(message),
+        }
+    }
+
+    pub fn friendly_name(&self) -> &str {
+        self.kind
+            .get_message()
+            .unwrap_or_else(|| panic!("missing message for action kind {}", self.kind))
+    }
+
+    pub fn description(&self) -> String {
+        match self.kind {
+            ActionKind::Notify => match (&self.message, self.channel) {
+                (None, _) => panic!(format!("invalid action: kind is {} but message is None", self.kind)),
+                (Some(msg), None) => format!("In the same channel with `{}`", msg),
+                (Some(msg), Some(channel)) => format!("In <#{}> with `{}`", channel, msg),
+            },
+            ActionKind::RemoveMessage => {
+                // Discord requires the embed field to always have *some* value but they don't document the requirement
+                // anywhere. omitting the value has Discord respond with a very unhelpful error message that Serenity
+                // can't do anything with, other than complain about invalid JSON
+                String::from("Remove the message, nothing special about it")
+            }
         }
     }
 }

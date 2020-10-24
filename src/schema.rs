@@ -1,6 +1,6 @@
 table! {
     use diesel::sql_types::*;
-    use crate::module::{Module_kind, action::Action_kind};
+    use crate::module::dbimport::*;
 
     actions (id) {
         id -> Int4,
@@ -14,7 +14,7 @@ table! {
 
 table! {
     use diesel::sql_types::*;
-    use crate::module::{Module_kind, action::Action_kind};
+    use crate::module::dbimport::*;
 
     module_settings (guild, module) {
         guild -> Int8,
@@ -23,4 +23,7 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(actions, module_settings,);
+allow_tables_to_appear_in_same_query!(
+    actions,
+    module_settings,
+);

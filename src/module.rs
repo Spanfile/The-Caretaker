@@ -1,4 +1,7 @@
 pub mod action;
+pub mod dbimport {
+    pub use super::{action::Action_kind, Module_kind};
+}
 
 use self::action::{Action, ActionKind};
 use crate::{error::CaretakerError, models, schema};
@@ -9,6 +12,7 @@ use serenity::model::id::{ChannelId, GuildId};
 use std::{borrow::Cow, collections::HashMap};
 use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 
+// the database schema holds its own version of this enum, remember to modify it as well if modying this one
 #[derive(Debug, EnumString, EnumVariantNames, EnumIter, Display, Copy, Clone, Eq, PartialEq, Hash, DbEnum)]
 #[strum(serialize_all = "kebab-case")]
 #[DieselType = "Module_kind"]
@@ -18,6 +22,7 @@ pub enum ModuleKind {
     DynamicSlowmode,
     EmojiSpam,
     MentionSpam,
+    Selfbot,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -40,27 +45,12 @@ impl From<models::ModuleSetting> for Module {
 impl Module {
     fn default_for_kind_with_guild(kind: ModuleKind, guild: GuildId) -> Self {
         match kind {
-            ModuleKind::MassPing => Self {
-                guild,
-                kind,
-                enabled: false,
-            },
-            ModuleKind::Crosspost => Self {
-                guild,
-                kind,
-                enabled: false,
-            },
-            ModuleKind::DynamicSlowmode => Self {
-                guild,
-                kind,
-                enabled: false,
-            },
-            ModuleKind::EmojiSpam => Self {
-                guild,
-                kind,
-                enabled: false,
-            },
-            ModuleKind::MentionSpam => Self {
+            ModuleKind::MassPing
+            | ModuleKind::Crosspost
+            | ModuleKind::DynamicSlowmode
+            | ModuleKind::EmojiSpam
+            | ModuleKind::MentionSpam
+            | ModuleKind::Selfbot => Self {
                 guild,
                 kind,
                 enabled: false,

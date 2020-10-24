@@ -1,13 +1,14 @@
 CREATE TYPE module_kind AS ENUM (
-    'mass-ping',
+    'mass_ping',
     'crosspost',
-    'dynamic-slowmode',
-    'emoji-spam',
-    'mention-spam'
+    'dynamic_slowmode',
+    'emoji_spam',
+    'mention_spam',
+    'selfbot'
 );
 
 CREATE TYPE action_kind AS ENUM (
-    'remove-message',
+    'remove_message',
     'notify'
 );
 

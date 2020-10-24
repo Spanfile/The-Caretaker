@@ -18,7 +18,7 @@ use serenity::{
 };
 use std::borrow::Cow;
 use structopt::{clap, StructOpt};
-use strum::{EnumMessage, VariantNames};
+use strum::VariantNames;
 
 pub const COMMAND_PREFIX: &str = "-ct";
 const UNICODE_CHECK: char = '\u{2705}';
@@ -100,6 +100,11 @@ enum ModuleSubcommand {
 #[async_trait]
 impl Framework for Management {
     async fn dispatch(&self, ctx: Context, msg: Message) {
+        // straight-up ignore bot messages
+        if !self.is_from_user(&msg) {
+            return;
+        }
+
         info!("Dispatch called: '{:?}' by {}", msg.content, msg.author);
         debug!("{:#?}", msg);
 
@@ -128,10 +133,6 @@ impl Management {
     }
 
     async fn process_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-        if !self.is_from_user(msg) {
-            return Ok(());
-        }
-
         let guild = if let Some(guild) = msg.guild(ctx).await {
             guild
         } else {
@@ -294,47 +295,10 @@ impl ModuleSubcommand {
                         } else {
                             m.embed(|e| {
                                 e.title(format!("Actions for the `{}` module", module.kind()));
-                                for (idx, action) in actions.into_iter().enumerate() {
-                                    let name = format!(
-                                        "{}: {}",
-                                        idx,
-                                        action.kind.get_message().expect("missing message for action")
-                                    );
 
-                                    match action.kind {
-                                        ActionKind::Notify => {
-                                            if let Some(message) = action.message {
-                                                if let Some(channel) = action.channel {
-                                                    e.field(
-                                                        name,
-                                                        format!("In <#{}> with `{}`", channel, message),
-                                                        false,
-                                                    );
-                                                } else {
-                                                    e.field(
-                                                        name,
-                                                        format!("In the same channel with `{}`", message),
-                                                        false,
-                                                    );
-                                                }
-                                            } else {
-                                                warn!(
-                                                    "While listing actions, the action {:?} for guild {} had no \
-                                                     message specified",
-                                                    action,
-                                                    module.guild(),
-                                                );
-                                                e.field(name, "No message specified! This shouldn't happen!", false);
-                                            }
-                                        }
-                                        ActionKind::RemoveMessage => {
-                                            // Discord requires the embed field to always have *some* value but they
-                                            // don't document the requirement anywhere. omitting the value has Discord
-                                            // respond with a very unhelpful error message that Serenity can't do
-                                            // anything with, other than complain about invalid JSON
-                                            e.field(name, "Remove the message, nothing special about it", false);
-                                        }
-                                    }
+                                for (idx, action) in actions.into_iter().enumerate() {
+                                    let name = format!("{}: {}", idx, action.friendly_name());
+                                    e.field(name, action.description(), false);
                                 }
 
                                 e
@@ -353,7 +317,7 @@ impl ModuleSubcommand {
                         in_channel,
                         message
                             .as_deref()
-                            .map(|s| Cow::Borrowed(s))
+                            .map(Cow::Borrowed)
                             .expect("message is None while ActionKind is Notify. this shouldn't happen"),
                     ),
                     ActionKind::RemoveMessage => Action::remove_message(),
