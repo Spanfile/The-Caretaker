@@ -16,7 +16,7 @@ use serenity::{
     model::{channel::Message, id::ChannelId},
     utils::Colour,
 };
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Instant};
 use structopt::{clap, StructOpt};
 use strum::VariantNames;
 
@@ -109,10 +109,16 @@ impl Framework for Management {
         info!("Dispatch called: '{:?}' by {}", msg.content, msg.author);
         debug!("{:#?}", msg);
 
+        let start = Instant::now();
         match self.process_message(&ctx, &msg).await {
-            Ok(_) => debug!("Message processed succesfully"),
+            Ok(_) => debug!("Message processed succesfully. Processing took {:?}", start.elapsed()),
             Err(err) => {
-                warn!("Message processing failed: {}", err);
+                warn!(
+                    "Message processing failed: {} (processing took {:?})",
+                    err,
+                    start.elapsed()
+                );
+
                 if let Err(e) = msg
                     .channel_id
                     .send_message(&ctx, |m| {
