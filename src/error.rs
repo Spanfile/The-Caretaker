@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum CaretakerError {
+pub enum InternalError {
     #[error("A deliberate error")]
     DeliberateError,
     #[error("No guild ID in received message")]
@@ -14,6 +14,10 @@ pub enum CaretakerError {
     MissingOwnShardMetadata(u64),
     #[error("Missing field '{0}' in model")]
     MissingField(&'static str),
+}
+
+#[derive(Error, Debug)]
+pub enum ArgumentError {
     #[error("The index {0} is out of range")]
     IndexOutOfRange(usize),
 }

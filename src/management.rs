@@ -1,5 +1,5 @@
 use crate::{
-    error::CaretakerError,
+    error::{ArgumentError, InternalError},
     module::{
         action::{Action, ActionKind},
         Module, ModuleKind,
@@ -23,6 +23,7 @@ use strum::VariantNames;
 pub const COMMAND_PREFIX: &str = "-ct";
 const UNICODE_CHECK: char = '\u{2705}';
 const UNICODE_CROSS: char = '\u{274C}';
+const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
 
 pub struct Management {}
 
@@ -115,7 +116,12 @@ impl Framework for Management {
                 if let Err(e) = msg
                     .channel_id
                     .send_message(&ctx, |m| {
-                        internal_error_message(err, m);
+                        if err.downcast_ref::<ArgumentError>().is_some() {
+                            argument_error_message(err, m);
+                        } else {
+                            internal_error_message(err, m);
+                        }
+
                         m
                     })
                     .await
@@ -179,14 +185,14 @@ impl Command {
         let data = ctx.data.read().await;
 
         match self {
-            Command::Fail => return Err(CaretakerError::DeliberateError.into()),
+            Command::Fail => return Err(InternalError::DeliberateError.into()),
             Command::Status => {
                 let shards = data
                     .get::<ShardMetadata>()
-                    .ok_or(CaretakerError::NoShardMetadataCollection)?;
+                    .ok_or(InternalError::NoShardMetadataCollection)?;
                 let own_shard = shards
                     .get(&ctx.shard_id)
-                    .ok_or(CaretakerError::MissingOwnShardMetadata(ctx.shard_id))?;
+                    .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
 
                 msg.channel_id
                     .send_message(&ctx, |m| {
@@ -214,10 +220,10 @@ impl Command {
                     .await?;
             }
             Command::Module { module, subcommand } => {
-                let guild_id = msg.guild_id.ok_or(CaretakerError::NoGuildId)?;
+                let guild_id = msg.guild_id.ok_or(InternalError::NoGuildId)?;
                 let db = data
                     .get::<DbConnection>()
-                    .ok_or(CaretakerError::NoDatabaseConnection)?
+                    .ok_or(InternalError::NoDatabaseConnection)?
                     .lock()
                     .await;
 
@@ -263,7 +269,7 @@ impl ModuleSubcommand {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
-            .ok_or(CaretakerError::NoDatabaseConnection)?
+            .ok_or(InternalError::NoDatabaseConnection)?
             .lock()
             .await;
 
@@ -288,10 +294,7 @@ impl ModuleSubcommand {
                 msg.channel_id
                     .send_message(ctx, |m| {
                         if actions.is_empty() {
-                            m.content(
-                                "There aren't any actions defined for this module. Add some with the `add-action` \
-                                 subcommand!",
-                            )
+                            m.content(NO_ACTIONS)
                         } else {
                             m.embed(|e| {
                                 e.title(format!("Actions for the `{}` module", module.kind()));
@@ -322,12 +325,17 @@ impl ModuleSubcommand {
                     ),
                     ActionKind::RemoveMessage => Action::remove_message(),
                 };
+
                 module.add_action(action, &db)?;
                 react_success(ctx, msg).await?;
             }
             ModuleSubcommand::RemoveAction { index } => {
-                module.remove_nth_action(index, &db)?;
-                react_success(ctx, msg).await?;
+                if module.action_count(&db)? == 0 {
+                    msg.channel_id.send_message(ctx, |m| m.content(NO_ACTIONS)).await?;
+                } else {
+                    module.remove_nth_action(index, &db)?;
+                    react_success(ctx, msg).await?;
+                }
             }
         }
 
@@ -345,6 +353,13 @@ where
             .timestamp(&Utc::now())
             .colour(Colour::RED)
     });
+}
+
+fn argument_error_message<E>(err: E, m: &mut CreateMessage<'_>)
+where
+    E: AsRef<dyn std::error::Error>,
+{
+    m.content(format!("{} {}", UNICODE_CROSS, err.as_ref()));
 }
 
 fn codeblock_message(message: &str, m: &mut CreateMessage<'_>) {

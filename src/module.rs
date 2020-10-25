@@ -4,7 +4,10 @@ pub mod dbimport {
 }
 
 use self::action::{Action, ActionKind};
-use crate::{error::CaretakerError, models, schema};
+use crate::{
+    error::{ArgumentError, InternalError},
+    models, schema,
+};
 use diesel::{prelude::*, PgConnection};
 use diesel_derive_enum::DbEnum;
 use log::*;
@@ -148,7 +151,7 @@ impl Module {
                     model
                         .message
                         .map(Cow::Owned)
-                        .ok_or(CaretakerError::MissingField("message"))?,
+                        .ok_or(InternalError::MissingField("message"))?,
                 )),
             }
         }
@@ -177,10 +180,10 @@ impl Module {
             },
         };
 
-        let id: i32 = diesel::insert_into(actions::table)
+        let id = diesel::insert_into(actions::table)
             .values(&action_model)
             .returning(actions::id)
-            .get_result(db)?;
+            .get_result::<i32>(db)?;
 
         debug!("Insert {:?} -> ID {}", action_model, id);
         Ok(id)
@@ -196,7 +199,7 @@ impl Module {
                     .and(actions::module.eq(self.kind)),
             )
             .load::<models::Action>(db)?;
-        let delete = actions.get(n).ok_or(CaretakerError::IndexOutOfRange(n))?;
+        let delete = actions.get(n).ok_or(ArgumentError::IndexOutOfRange(n))?;
 
         // return the deleted row's ID but don't store it anywhere, because this way diesel will error if the delete
         // affected no rows
@@ -206,5 +209,22 @@ impl Module {
 
         debug!("Delete {:?}", delete);
         Ok(())
+    }
+
+    pub fn action_count(self, db: &PgConnection) -> anyhow::Result<i64> {
+        use diesel::dsl::*;
+        use schema::actions;
+
+        let count = actions::table
+            .filter(
+                actions::guild
+                    .eq(self.guild.0 as i64)
+                    .and(actions::module.eq(self.kind)),
+            )
+            .select(count_star())
+            .first(db)?;
+
+        debug!("# actions: {}", count);
+        Ok(count)
     }
 }
