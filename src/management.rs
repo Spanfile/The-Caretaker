@@ -1,12 +1,14 @@
 use crate::{
     error::{ArgumentError, InternalError},
+    ext::DurationExt,
     module::{
         action::{Action, ActionKind},
         Module, ModuleKind,
     },
-    DbConnection, ShardMetadata,
+    BotUptime, DbConnection, ShardMetadata,
 };
 use chrono::Utc;
+use humantime::format_duration;
 use log::*;
 use serenity::{
     async_trait,
@@ -195,16 +197,25 @@ impl Command {
             Command::Status => {
                 let shards = data
                     .get::<ShardMetadata>()
-                    .ok_or(InternalError::NoShardMetadataCollection)?;
+                    .ok_or(InternalError::MissingUserdata("ShardMetadata"))?;
                 let own_shard = shards
                     .get(&ctx.shard_id)
                     .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
+
+                let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
+                let bot_uptime = data
+                    .get::<BotUptime>()
+                    .ok_or(InternalError::MissingUserdata("BotUptime"))?
+                    .elapsed()
+                    .round_to_seconds();
 
                 msg.channel_id
                     .send_message(&ctx, |m| {
                         m.embed(|e| {
                             e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
                             e.field("Guilds", format!("{}", own_shard.guilds), true);
+                            e.field("Bot uptime", format!("{}", format_duration(bot_uptime)), true);
+                            e.field("Shard uptime", format!("{}", format_duration(own_uptime)), true);
 
                             if let Some(latency) = own_shard.latency {
                                 e.field(
@@ -229,7 +240,7 @@ impl Command {
                 let guild_id = msg.guild_id.ok_or(InternalError::NoGuildId)?;
                 let db = data
                     .get::<DbConnection>()
-                    .ok_or(InternalError::NoDatabaseConnection)?
+                    .ok_or(InternalError::MissingUserdata("DbConnection"))?
                     .lock()
                     .await;
 
@@ -275,7 +286,7 @@ impl ModuleSubcommand {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
-            .ok_or(InternalError::NoDatabaseConnection)?
+            .ok_or(InternalError::MissingUserdata("DbConnection"))?
             .lock()
             .await;
 

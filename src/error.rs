@@ -6,10 +6,8 @@ pub enum InternalError {
     DeliberateError,
     #[error("No guild ID in received message")]
     NoGuildId,
-    #[error("No database connection in userdata")]
-    NoDatabaseConnection,
-    #[error("No shard metadata collection in userdata")]
-    NoShardMetadataCollection,
+    #[error("Missing userdata '{0}'")]
+    MissingUserdata(&'static str),
     #[error("Missing own shard ID {0} metadata in shard metadata collection")]
     MissingOwnShardMetadata(u64),
     #[error("Missing field '{0}' in model")]

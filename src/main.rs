@@ -5,6 +5,7 @@ extern crate diesel;
 extern crate diesel_migrations;
 
 mod error;
+mod ext;
 mod logging;
 mod management;
 mod models;
@@ -22,7 +23,7 @@ use serenity::{
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::time;
 
@@ -51,11 +52,12 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct ShardMetadata {
     id: u64,
     guilds: usize,
     latency: Option<Duration>,
+    last_connected: Instant,
 }
 
 impl TypeMapKey for ShardMetadata {
@@ -65,6 +67,11 @@ impl TypeMapKey for ShardMetadata {
 struct DbConnection {}
 impl TypeMapKey for DbConnection {
     type Value = Arc<Mutex<PgConnection>>;
+}
+
+struct BotUptime {}
+impl TypeMapKey for BotUptime {
+    type Value = Instant;
 }
 
 struct Handler;
@@ -85,7 +92,7 @@ impl EventHandler for Handler {
             Handler::set_info_activity(&ctx, shard, shards).await;
             Handler::insert_shard_metadata(&ctx, shard, ready.guilds.len()).await;
         } else {
-            warn!("Session ready, but shard was None");
+            error!("Session ready, but shard was None");
         }
     }
 
@@ -128,6 +135,7 @@ impl Handler {
                     id: shard,
                     guilds,
                     latency: None,
+                    last_connected: Instant::now(),
                 },
             );
         } else {
@@ -145,12 +153,32 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting...");
     debug!("{:#?}", config);
 
-    debug!("Establishing database connection to {}...", config.database_url);
-    let db_conn = PgConnection::establish(&config.database_url)?;
-    embedded_migrations::run(&db_conn)?;
+    let mut client = create_discord_client(&config.discord_token).await?;
+    let db_conn = establish_database_connection(&config.database_url)?;
 
+    populate_userdata(&client, db_conn).await;
+    spawn_shard_latency_ticker(&client, config.latency_update_freq_ms);
+    spawn_termination_waiter(&client);
+
+    debug!("Starting autosharded...");
+    match client.start_autosharded().await {
+        Ok(_) => info!("Client shut down succesfully!"),
+        Err(e) => error!("Client returned error: {}", e),
+    }
+
+    Ok(())
+}
+
+fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
+    debug!("Establishing database connection to {}...", url);
+    let db_conn = PgConnection::establish(url)?;
+    embedded_migrations::run(&db_conn)?;
+    Ok(db_conn)
+}
+
+async fn create_discord_client(token: &str) -> anyhow::Result<Client> {
     debug!("Initialising Discord client...");
-    let http = Http::new_with_token(&config.discord_token);
+    let http = Http::new_with_token(token);
     let (owners, bot_id) = http.get_current_application_info().await.map(|info| {
         let mut owners = HashSet::new();
         owners.insert(info.owner.id);
@@ -162,24 +190,24 @@ async fn main() -> anyhow::Result<()> {
     debug!("Owners: {:#?}", owners);
 
     let mgmt = Management::new();
-    let mut client = Client::builder(&config.discord_token)
-        .token(&config.discord_token)
-        .event_handler(Handler)
-        .framework(mgmt)
-        .await?;
+    let client = Client::builder(token).event_handler(Handler).framework(mgmt).await?;
+    Ok(client)
+}
 
-    {
-        let mut data = client.data.write().await;
-        data.insert::<ShardMetadata>(Default::default());
-        data.insert::<DbConnection>(Arc::new(Mutex::new(db_conn)));
-    }
+async fn populate_userdata(client: &Client, db_conn: PgConnection) {
+    let mut data = client.data.write().await;
+    data.insert::<ShardMetadata>(Default::default());
+    data.insert::<DbConnection>(Arc::new(Mutex::new(db_conn)));
+    data.insert::<BotUptime>(Instant::now());
+}
 
+fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
     let shard_manager = client.shard_manager.clone();
     let client_data = client.data.clone();
     tokio::spawn(async move {
         debug!("Starting shard latency update ticker");
         loop {
-            time::delay_for(Duration::from_millis(config.latency_update_freq_ms)).await;
+            time::delay_for(Duration::from_millis(update_freq)).await;
 
             let manager = shard_manager.lock().await;
             let runners = manager.runners.lock().await;
@@ -187,7 +215,7 @@ async fn main() -> anyhow::Result<()> {
             let shard_meta_collection = if let Some(sm) = data.get_mut::<ShardMetadata>() {
                 sm
             } else {
-                warn!("No shard collection in client userdata");
+                error!("No shard collection in client userdata");
                 continue;
             };
 
@@ -203,27 +231,18 @@ async fn main() -> anyhow::Result<()> {
                         (None, None) => warn!("Missing first latency update for shard {}", id),
                     }
                 } else {
-                    warn!("No metadata object for shard {} found", id);
+                    error!("No metadata object for shard {} found", id);
                 }
             }
         }
     });
-
-    debug!("Starting autosharded...");
-    tokio::select! {
-        res = client.start_autosharded() => {
-            info!("Client returned");
-            debug!("{:#?}", res);
-            res?;
-        }
-        _ = term_signal() => {
-            info!("Caught SIGINT, shutting down all shards");
-            client.shard_manager.lock().await.shutdown_all().await;
-        }
-    };
-    Ok(())
 }
 
-async fn term_signal() {
-    tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
+fn spawn_termination_waiter(client: &Client) {
+    let shard_manager = client.shard_manager.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
+        info!("Caught SIGINT, shutting down all shards");
+        shard_manager.lock().await.shutdown_all().await;
+    });
 }
