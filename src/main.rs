@@ -300,11 +300,16 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
         .get::<ModuleCache>()
         .ok_or(InternalError::MissingUserdata("ModuleCache"))?
         .clone();
+    let db_arc = Arc::clone(
+        data.get::<DbConnection>()
+            .ok_or(InternalError::MissingUserdata("DbConnection"))?,
+    );
+    let cache_and_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {
         debug!("Starting action handler loop");
         loop {
-            let (kind, guild, msg) = match rx.recv().await {
+            let (kind, guild, channel, message) = match rx.recv().await {
                 Some(r) => r,
                 None => {
                     error!("Matcher response channel closed");
@@ -312,8 +317,32 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 }
             };
 
-            if module_cache.get(guild, kind).await.enabled() {
-                debug!("Running actions for guild {} module {} message {}", guild, kind, msg);
+            let module = module_cache.get(guild, kind).await;
+            if module.enabled() {
+                debug!(
+                    "Running actions for guild {} module {} message {}",
+                    guild, kind, message
+                );
+
+                let db = db_arc.lock().await;
+                let actions = match module.get_actions(&db) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        error!("Failed to get module actions: {}", e);
+                        continue;
+                    }
+                };
+
+                let start = Instant::now();
+                for action in actions {
+                    if let Err(e) = action.run(&cache_and_http.http, channel, message).await {
+                        error!(
+                            "Failed to run module {:?} {:?} action against guild {} channel {} message {}: {}",
+                            kind, action, guild, channel, message, e
+                        );
+                    }
+                }
+                debug!("Actions performed in {:?}", start.elapsed());
             }
         }
     });

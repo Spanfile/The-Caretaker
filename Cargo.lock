@@ -1239,6 +1239,7 @@ dependencies = [
  "humantime",
  "log",
  "serde",
+ "serde_json",
  "serenity",
  "shellwords",
  "structopt",

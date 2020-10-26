@@ -1,12 +1,14 @@
 mod mass_ping;
 
+use std::time::Instant;
+
 use crate::module::ModuleKind;
 use log::*;
 use serenity::{
     async_trait,
     model::{
         channel::Message,
-        id::{GuildId, MessageId},
+        id::{ChannelId, GuildId, MessageId},
     },
 };
 use tokio::sync::{
@@ -14,7 +16,7 @@ use tokio::sync::{
     mpsc,
 };
 
-pub type MatcherResponse = (ModuleKind, GuildId, MessageId);
+pub type MatcherResponse = (ModuleKind, GuildId, ChannelId, MessageId);
 
 #[async_trait]
 trait Matcher {
@@ -57,9 +59,17 @@ where
             }
         };
 
+        let start = Instant::now();
         if M::is_match(&msg).await {
-            debug!("{}: matched '{}' by {}", module, msg.content, msg.author.id);
-            if tx.send((module, guild_id, msg.id)).await.is_err() {
+            debug!(
+                "{}: matched '{}' by {} in {:?}",
+                module,
+                msg.content,
+                msg.author.id,
+                start.elapsed()
+            );
+
+            if tx.send((module, guild_id, msg.channel_id, msg.id)).await.is_err() {
                 error!("{}: action channel closed", module);
                 return;
             }

@@ -1,5 +1,9 @@
 use diesel_derive_enum::DbEnum;
-use serenity::model::id::ChannelId;
+use serde_json::json;
+use serenity::{
+    http::Http,
+    model::id::{ChannelId, MessageId},
+};
 use std::borrow::Cow;
 use strum::{Display, EnumMessage, EnumString};
 
@@ -60,5 +64,25 @@ impl<'a> Action<'a> {
                 String::from("Remove the message, nothing special about it")
             }
         }
+    }
+
+    pub async fn run(&self, http: &Http, channel: ChannelId, msg: MessageId) -> anyhow::Result<()> {
+        match self.kind {
+            ActionKind::RemoveMessage => {
+                http.delete_message(channel.0, msg.0).await?;
+            }
+            ActionKind::Notify => {
+                let message = self.message.clone().expect("missing message in action");
+                let value = json!({ "content": message });
+
+                match self.channel {
+                    Some(notify_channel) => http.send_message(notify_channel.0, &value),
+                    None => http.send_message(channel.0, &value),
+                }
+                .await?;
+            }
+        }
+
+        Ok(())
     }
 }

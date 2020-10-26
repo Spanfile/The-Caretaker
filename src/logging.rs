@@ -51,11 +51,12 @@ pub fn setup_logging(log_level: LogLevel) -> anyhow::Result<()> {
             ))
         })
         .level(log_level.into())
+        .level_for("tracing", LevelFilter::Warn)
+        .level_for("async_tungstenite", LevelFilter::Debug)
         .chain(std::io::stdout());
 
     if log_level != LogLevel::Trace {
         dispatch = dispatch
-            .level_for("tracing", LevelFilter::Warn)
             .level_for("serenity", LevelFilter::Warn)
             .level_for("h2", LevelFilter::Warn)
             .level_for("hyper", LevelFilter::Warn)
