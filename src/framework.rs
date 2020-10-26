@@ -21,13 +21,12 @@ use serenity::{
 use std::{borrow::Cow, time::Instant};
 use structopt::{clap, StructOpt};
 use strum::VariantNames;
+use tokio::sync::broadcast;
 
 pub const COMMAND_PREFIX: &str = "-ct";
 const UNICODE_CHECK: char = '\u{2705}';
 const UNICODE_CROSS: char = '\u{274C}';
 const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
-
-pub struct CaretakerFramework {}
 
 #[derive(StructOpt, Debug)]
 #[structopt(
@@ -100,6 +99,10 @@ enum ModuleSubcommand {
     },
 }
 
+pub struct CaretakerFramework {
+    msg_tx: broadcast::Sender<Message>,
+}
+
 #[async_trait]
 impl Framework for CaretakerFramework {
     async fn dispatch(&self, ctx: Context, msg: Message) {
@@ -138,8 +141,8 @@ impl Framework for CaretakerFramework {
 }
 
 impl CaretakerFramework {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(msg_tx: broadcast::Sender<Message>) -> Self {
+        Self { msg_tx }
     }
 
     async fn process_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
@@ -180,7 +183,10 @@ impl CaretakerFramework {
         Ok(())
     }
 
-    async fn process_user_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn process_user_message(&self, _ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        if self.msg_tx.send(msg.clone()).is_err() {
+            error!("Sending message to broadcast channel failed (channel closed)");
+        }
         Ok(())
     }
 }

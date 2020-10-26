@@ -8,6 +8,7 @@ mod error;
 mod ext;
 mod framework;
 mod logging;
+mod matcher;
 mod models;
 mod module;
 mod schema;
@@ -17,20 +18,18 @@ use framework::CaretakerFramework;
 use log::*;
 use serde::Deserialize;
 use serenity::{
-    async_trait,
-    client::bridge::gateway::{event::ShardStageUpdateEvent, ShardId},
-    gateway::ConnectionStage,
-    http::Http,
-    model::prelude::*,
-    prelude::*,
-    Client,
+    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
+    model::prelude::*, prelude::*, Client,
 };
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::time;
+use tokio::{
+    sync::{broadcast, mpsc},
+    time,
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -177,7 +176,11 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting...");
     debug!("{:#?}", config);
 
-    let mut client = create_discord_client(&config.discord_token).await?;
+    let (msg_tx, _) = broadcast::channel(64);
+    let (action_tx, action_rx) = mpsc::channel(8);
+    matcher::spawn_message_matchers(&msg_tx, action_tx);
+
+    let mut client = create_discord_client(&config.discord_token, msg_tx).await?;
     let db_conn = establish_database_connection(&config.database_url)?;
 
     populate_userdata(&client, db_conn).await;
@@ -200,7 +203,7 @@ fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
     Ok(db_conn)
 }
 
-async fn create_discord_client(token: &str) -> anyhow::Result<Client> {
+async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Message>) -> anyhow::Result<Client> {
     debug!("Initialising Discord client...");
     let http = Http::new_with_token(token);
     let (owners, bot_id) = http.get_current_application_info().await.map(|info| {
@@ -213,7 +216,7 @@ async fn create_discord_client(token: &str) -> anyhow::Result<Client> {
     debug!("Own ID: {}", bot_id);
     debug!("Owners: {:#?}", owners);
 
-    let framework = CaretakerFramework::new();
+    let framework = CaretakerFramework::new(msg_tx);
     let client = Client::builder(token)
         .event_handler(Handler)
         .framework(framework)
