@@ -14,8 +14,10 @@ mod module;
 mod schema;
 
 use diesel::{pg::PgConnection, prelude::*};
+use error::InternalError;
 use framework::CaretakerFramework;
 use log::*;
+use matcher::MatcherResponse;
 use module::cache::ModuleCache;
 use serde::Deserialize;
 use serenity::{
@@ -185,10 +187,11 @@ async fn main() -> anyhow::Result<()> {
     let db_conn = establish_database_connection(&config.database_url)?;
 
     populate_userdata(&client, db_conn).await?;
+    spawn_action_handler(&client, action_rx).await?;
     spawn_shard_latency_ticker(&client, config.latency_update_freq_ms);
     spawn_termination_waiter(&client);
 
-    debug!("Starting autosharded...");
+    debug!("Starting autosharded client...");
     match client.start_autosharded().await {
         Ok(_) => info!("Client shut down succesfully!"),
         Err(e) => error!("Client returned error: {}", e),
@@ -199,6 +202,7 @@ async fn main() -> anyhow::Result<()> {
 
 fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
     debug!("Establishing database connection to {}...", url);
+
     let db_conn = PgConnection::establish(url)?;
     embedded_migrations::run(&db_conn)?;
     Ok(db_conn)
@@ -206,6 +210,7 @@ fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
 
 async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Message>) -> anyhow::Result<Client> {
     debug!("Initialising Discord client...");
+
     let http = Http::new_with_token(token);
     let (owners, bot_id) = http.get_current_application_info().await.map(|info| {
         let mut owners = HashSet::new();
@@ -226,6 +231,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Message>) 
 }
 
 async fn populate_userdata(client: &Client, db: PgConnection) -> anyhow::Result<()> {
+    debug!("Populating userdata...");
     let mut data = client.data.write().await;
 
     data.insert::<ModuleCache>(ModuleCache::populate_from_db(&db)?);
@@ -237,10 +243,12 @@ async fn populate_userdata(client: &Client, db: PgConnection) -> anyhow::Result<
 }
 
 fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
+    debug!("Spawning shard latency update ticker...");
+
     let shard_manager = client.shard_manager.clone();
     let client_data = client.data.clone();
     tokio::spawn(async move {
-        debug!("Starting shard latency update ticker");
+        debug!("Starting shard latency update loop");
         loop {
             time::delay_for(Duration::from_millis(update_freq)).await;
 
@@ -274,10 +282,41 @@ fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
 }
 
 fn spawn_termination_waiter(client: &Client) {
+    debug!("Spawning termination waiter...");
+
     let shard_manager = client.shard_manager.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
         info!("Caught SIGINT, shutting down all shards");
         shard_manager.lock().await.shutdown_all().await;
     });
+}
+
+async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherResponse>) -> anyhow::Result<()> {
+    debug!("Spawning action handler...");
+
+    let data = client.data.read().await;
+    let module_cache = data
+        .get::<ModuleCache>()
+        .ok_or(InternalError::MissingUserdata("ModuleCache"))?
+        .clone();
+
+    tokio::spawn(async move {
+        debug!("Starting action handler loop");
+        loop {
+            let (kind, guild, msg) = match rx.recv().await {
+                Some(r) => r,
+                None => {
+                    error!("Matcher response channel closed");
+                    return;
+                }
+            };
+
+            if module_cache.get(guild, kind).await.enabled() {
+                debug!("Running actions for guild {} module {} message {}", guild, kind, msg);
+            }
+        }
+    });
+
+    Ok(())
 }

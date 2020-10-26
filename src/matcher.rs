@@ -14,7 +14,7 @@ use tokio::sync::{
     mpsc,
 };
 
-type MatcherResponse = (ModuleKind, GuildId, MessageId);
+pub type MatcherResponse = (ModuleKind, GuildId, MessageId);
 
 #[async_trait]
 trait Matcher {
