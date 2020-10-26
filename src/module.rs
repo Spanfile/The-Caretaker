@@ -24,9 +24,11 @@ pub enum ModuleKind {
     MassPing,
     Crosspost,
     DynamicSlowmode,
+    UserSlowmode,
     EmojiSpam,
     MentionSpam,
     Selfbot,
+    InviteLink,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -52,9 +54,11 @@ impl Module {
             ModuleKind::MassPing
             | ModuleKind::Crosspost
             | ModuleKind::DynamicSlowmode
+            | ModuleKind::UserSlowmode
             | ModuleKind::EmojiSpam
             | ModuleKind::MentionSpam
-            | ModuleKind::Selfbot => Self {
+            | ModuleKind::Selfbot
+            | ModuleKind::InviteLink => Self {
                 guild,
                 kind,
                 enabled: false,
