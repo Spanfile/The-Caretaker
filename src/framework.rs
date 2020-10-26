@@ -143,44 +143,45 @@ impl CaretakerFramework {
     }
 
     async fn process_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-        let guild = if let Some(guild) = msg.guild(ctx).await {
-            guild
-        } else {
-            // no guild: the message was probably a DM
-            return Ok(());
-        };
-
         if let Some(command) = msg.content.strip_prefix(COMMAND_PREFIX) {
-            let command = match Command::from_iter_safe(shellwords::split(command)?) {
-                Ok(c) => c,
-                Err(clap::Error { kind, message, .. }) => {
-                    warn!("structopt returned {:?} error: {:?}", kind, message);
-                    msg.channel_id
-                        .send_message(&ctx, |m| {
-                            codeblock_message(&message, m);
-                            m
-                        })
-                        .await?;
-                    return Ok(());
-                }
-            };
-
-            info!(
-                "{} ({}) in '{}' ({:?}): {:?}",
-                msg.author.tag(),
-                msg.author,
-                guild.name,
-                guild.id,
-                command
-            );
-            command.run(ctx, msg).await?;
+            self.process_management_command(command, ctx, msg).await
+        } else {
+            self.process_user_message(ctx, msg).await
         }
-
-        Ok(())
     }
 
     fn is_from_user(&self, msg: &Message) -> bool {
         !msg.author.bot
+    }
+
+    async fn process_management_command(&self, command: &str, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        let command = match Command::from_iter_safe(shellwords::split(command)?) {
+            Ok(c) => c,
+            Err(clap::Error { kind, message, .. }) => {
+                warn!("structopt returned {:?} error: {:?}", kind, message);
+                msg.channel_id
+                    .send_message(&ctx, |m| {
+                        codeblock_message(&message, m);
+                        m
+                    })
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        info!(
+            "{} ({}) ({:?}): {:?}",
+            msg.author.tag(),
+            msg.author,
+            msg.guild_id,
+            command
+        );
+        command.run(ctx, msg).await?;
+        Ok(())
+    }
+
+    async fn process_user_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

@@ -17,7 +17,12 @@ use framework::CaretakerFramework;
 use log::*;
 use serde::Deserialize;
 use serenity::{
-    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, http::Http, model::prelude::*, prelude::*,
+    async_trait,
+    client::bridge::gateway::{event::ShardStageUpdateEvent, ShardId},
+    gateway::ConnectionStage,
+    http::Http,
+    model::prelude::*,
+    prelude::*,
     Client,
 };
 use std::{
@@ -89,23 +94,29 @@ impl EventHandler for Handler {
                 ready.session_id,
             );
 
-            Handler::set_info_activity(&ctx, shard, shards).await;
-            Handler::insert_shard_metadata(&ctx, shard, ready.guilds.len()).await;
+            self.set_info_activity(&ctx, shard, shards).await;
+            self.insert_shard_metadata(&ctx, shard, ready.guilds.len()).await;
         } else {
             error!("Session ready, but shard was None");
         }
     }
 
-    async fn resume(&self, _: Context, resume: ResumedEvent) {
-        info!("Resumed");
-        debug!("{:#?}", resume);
-    }
+    // the ResumedEvent contains no useful information, which is to say it contains no information
+    // async fn resume(&self, _: Context, resume: ResumedEvent) {
+    //     info!("Resumed");
+    //     debug!("{:#?}", resume);
+    // }
 
-    async fn shard_stage_update(&self, _: Context, update: ShardStageUpdateEvent) {
+    async fn shard_stage_update(&self, ctx: Context, update: ShardStageUpdateEvent) {
         info!(
             "Shard {} transitioned from {} to {}",
             update.shard_id, update.old, update.new
         );
+
+        if let (ConnectionStage::Resuming, ConnectionStage::Connected) = (update.old, update.new) {
+            info!("Shard {} reconnected, resetting last connected time", update.shard_id);
+            self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
+        }
     }
 
     async fn cache_ready(&self, _: Context, guilds: Vec<GuildId>) {
@@ -115,7 +126,7 @@ impl EventHandler for Handler {
 }
 
 impl Handler {
-    async fn set_info_activity(ctx: &Context, shard: u64, shards: u64) {
+    async fn set_info_activity(&self, ctx: &Context, shard: u64, shards: u64) {
         ctx.set_activity(Activity::playing(&format!(
             "{} [{}] [{}/{}]",
             framework::COMMAND_PREFIX,
@@ -126,7 +137,7 @@ impl Handler {
         .await;
     }
 
-    async fn insert_shard_metadata(ctx: &Context, shard: u64, guilds: usize) {
+    async fn insert_shard_metadata(&self, ctx: &Context, shard: u64, guilds: usize) {
         let mut data = ctx.data.write().await;
         if let Some(shard_meta) = data.get_mut::<ShardMetadata>() {
             shard_meta.insert(
@@ -139,7 +150,20 @@ impl Handler {
                 },
             );
         } else {
-            warn!("No shard collection in context userdata");
+            error!("No shard collection in context userdata");
+        }
+    }
+
+    async fn reset_shard_last_connected(&self, ctx: &Context, shard: u64) {
+        let mut data = ctx.data.write().await;
+        if let Some(meta_collection) = data.get_mut::<ShardMetadata>() {
+            if let Some(shard_meta) = meta_collection.get_mut(&shard) {
+                shard_meta.last_connected = Instant::now();
+            } else {
+                error!("No shard metadata for shard {}", shard);
+            }
+        } else {
+            error!("No shard collection in context userdata");
         }
     }
 }
