@@ -27,7 +27,7 @@ const UNICODE_CHECK: char = '\u{2705}';
 const UNICODE_CROSS: char = '\u{274C}';
 const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
 
-pub struct Management {}
+pub struct CaretakerFramework {}
 
 #[derive(StructOpt, Debug)]
 #[structopt(
@@ -101,47 +101,43 @@ enum ModuleSubcommand {
 }
 
 #[async_trait]
-impl Framework for Management {
+impl Framework for CaretakerFramework {
     async fn dispatch(&self, ctx: Context, msg: Message) {
         // straight-up ignore bot messages
         if !self.is_from_user(&msg) {
             return;
         }
 
-        info!("Dispatch called: '{:?}' by {}", msg.content, msg.author);
         debug!("{:#?}", msg);
 
         let start = Instant::now();
         match self.process_message(&ctx, &msg).await {
             Ok(_) => debug!("Message processed succesfully. Processing took {:?}", start.elapsed()),
             Err(err) => {
-                warn!(
+                error!(
                     "Message processing failed: {} (processing took {:?})",
                     err,
                     start.elapsed()
                 );
 
-                if let Err(e) = msg
-                    .channel_id
-                    .send_message(&ctx, |m| {
-                        if err.downcast_ref::<ArgumentError>().is_some() {
+                if err.downcast_ref::<ArgumentError>().is_some() {
+                    if let Err(e) = msg
+                        .channel_id
+                        .send_message(&ctx, |m| {
                             argument_error_message(err, m);
-                        } else {
-                            internal_error_message(err, m);
-                        }
-
-                        m
-                    })
-                    .await
-                {
-                    error!("Failed to send error message to channel {}: {}", msg.channel_id, e);
+                            m
+                        })
+                        .await
+                    {
+                        error!("Failed to send error message to channel {}: {}", msg.channel_id, e);
+                    }
                 }
             }
         }
     }
 }
 
-impl Management {
+impl CaretakerFramework {
     pub fn new() -> Self {
         Self {}
     }

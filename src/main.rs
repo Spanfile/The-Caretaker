@@ -6,15 +6,15 @@ extern crate diesel_migrations;
 
 mod error;
 mod ext;
+mod framework;
 mod logging;
-mod management;
 mod models;
 mod module;
 mod schema;
 
 use diesel::{pg::PgConnection, prelude::*};
+use framework::CaretakerFramework;
 use log::*;
-use management::Management;
 use serde::Deserialize;
 use serenity::{
     async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, http::Http, model::prelude::*, prelude::*,
@@ -118,7 +118,7 @@ impl Handler {
     async fn set_info_activity(ctx: &Context, shard: u64, shards: u64) {
         ctx.set_activity(Activity::playing(&format!(
             "{} [{}] [{}/{}]",
-            management::COMMAND_PREFIX,
+            framework::COMMAND_PREFIX,
             VERSION,
             shard + 1,
             shards
@@ -189,8 +189,11 @@ async fn create_discord_client(token: &str) -> anyhow::Result<Client> {
     debug!("Own ID: {}", bot_id);
     debug!("Owners: {:#?}", owners);
 
-    let mgmt = Management::new();
-    let client = Client::builder(token).event_handler(Handler).framework(mgmt).await?;
+    let framework = CaretakerFramework::new();
+    let client = Client::builder(token)
+        .event_handler(Handler)
+        .framework(framework)
+        .await?;
     Ok(client)
 }
 
