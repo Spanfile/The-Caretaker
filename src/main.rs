@@ -16,6 +16,7 @@ mod schema;
 use diesel::{pg::PgConnection, prelude::*};
 use framework::CaretakerFramework;
 use log::*;
+use module::cache::ModuleCache;
 use serde::Deserialize;
 use serenity::{
     async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
@@ -183,7 +184,7 @@ async fn main() -> anyhow::Result<()> {
     let mut client = create_discord_client(&config.discord_token, msg_tx).await?;
     let db_conn = establish_database_connection(&config.database_url)?;
 
-    populate_userdata(&client, db_conn).await;
+    populate_userdata(&client, db_conn).await?;
     spawn_shard_latency_ticker(&client, config.latency_update_freq_ms);
     spawn_termination_waiter(&client);
 
@@ -224,11 +225,15 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Message>) 
     Ok(client)
 }
 
-async fn populate_userdata(client: &Client, db_conn: PgConnection) {
+async fn populate_userdata(client: &Client, db: PgConnection) -> anyhow::Result<()> {
     let mut data = client.data.write().await;
+
+    data.insert::<ModuleCache>(ModuleCache::populate_from_db(&db)?);
     data.insert::<ShardMetadata>(Default::default());
-    data.insert::<DbConnection>(Arc::new(Mutex::new(db_conn)));
+    data.insert::<DbConnection>(Arc::new(Mutex::new(db)));
     data.insert::<BotUptime>(Instant::now());
+
+    Ok(())
 }
 
 fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {

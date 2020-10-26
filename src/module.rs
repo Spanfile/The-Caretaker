@@ -1,4 +1,5 @@
 pub mod action;
+pub mod cache;
 pub mod dbimport {
     pub use super::{action::Action_kind, Module_kind};
 }
@@ -61,6 +62,17 @@ impl Module {
         }
     }
 
+    pub fn get_all_modules(db: &PgConnection) -> anyhow::Result<Vec<Module>> {
+        use schema::module_settings;
+
+        let mut modules = Vec::new();
+        for m in module_settings::table.load::<models::ModuleSetting>(db)? {
+            modules.push(m.into());
+        }
+
+        Ok(modules)
+    }
+
     pub fn get_all_modules_for_guild(guild: GuildId, db: &PgConnection) -> anyhow::Result<HashMap<ModuleKind, Module>> {
         use schema::module_settings;
 
@@ -109,9 +121,10 @@ impl Module {
         self.enabled
     }
 
-    pub fn set_enabled(self, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
+    pub fn set_enabled(&mut self, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
         use schema::module_settings;
 
+        self.enabled = enabled;
         let enabled_setting = models::ModuleSetting {
             guild: self.guild.0 as i64,
             module: self.kind,

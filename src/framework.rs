@@ -3,6 +3,7 @@ use crate::{
     ext::DurationExt,
     module::{
         action::{Action, ActionKind},
+        cache::ModuleCache,
         Module, ModuleKind,
     },
     BotUptime, DbConnection, ShardMetadata,
@@ -285,17 +286,22 @@ impl Command {
 }
 
 impl ModuleSubcommand {
-    async fn run(self, module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, mut module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
             .ok_or(InternalError::MissingUserdata("DbConnection"))?
             .lock()
             .await;
+        let module_cache = data
+            .get::<ModuleCache>()
+            .ok_or(InternalError::MissingUserdata("ModuleCache"))?;
 
         match self {
             ModuleSubcommand::SetEnabled { enabled } => {
                 module.set_enabled(enabled, &db)?;
+                module_cache.update(module).await?;
+
                 react_success(ctx, msg).await?;
             }
             ModuleSubcommand::GetEnabled => {
