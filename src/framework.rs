@@ -19,7 +19,7 @@ use serenity::{
     model::{channel::Message, id::ChannelId},
     utils::Colour,
 };
-use std::{borrow::Cow, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 use structopt::{clap, StructOpt};
 use strum::VariantNames;
 use tokio::sync::broadcast;
@@ -101,7 +101,7 @@ enum ModuleSubcommand {
 }
 
 pub struct CaretakerFramework {
-    msg_tx: broadcast::Sender<Message>,
+    msg_tx: broadcast::Sender<Arc<Message>>,
 }
 
 #[async_trait]
@@ -114,41 +114,36 @@ impl Framework for CaretakerFramework {
 
         debug!("{:#?}", msg);
 
+        let channel_id = msg.channel_id;
         let start = Instant::now();
-        match self.process_message(&ctx, &msg).await {
-            Ok(_) => debug!("Message processed succesfully. Processing took {:?}", start.elapsed()),
-            Err(err) => {
-                error!(
-                    "Message processing failed: {} (processing took {:?})",
-                    err,
-                    start.elapsed()
-                );
+        if let Err(e) = self.process_message(&ctx, msg).await {
+            error!("Message processing failed: {}", e);
 
-                if err.downcast_ref::<ArgumentError>().is_some() {
-                    if let Err(e) = msg
-                        .channel_id
-                        .send_message(&ctx, |m| {
-                            argument_error_message(err, m);
-                            m
-                        })
-                        .await
-                    {
-                        error!("Failed to send error message to channel {}: {}", msg.channel_id, e);
-                    }
+            if e.downcast_ref::<ArgumentError>().is_some() {
+                if let Err(e) = channel_id
+                    .send_message(&ctx, |m| {
+                        argument_error_message(e, m);
+                        m
+                    })
+                    .await
+                {
+                    error!("Failed to send error message to channel {}: {}", channel_id, e);
                 }
             }
         }
+
+        debug!("Message processed succesfully. Processing took {:?}", start.elapsed());
     }
 }
 
 impl CaretakerFramework {
-    pub fn new(msg_tx: broadcast::Sender<Message>) -> Self {
+    pub fn new(msg_tx: broadcast::Sender<Arc<Message>>) -> Self {
         Self { msg_tx }
     }
 
-    async fn process_message(&self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-        if let Some(command) = msg.content.strip_prefix(COMMAND_PREFIX) {
-            self.process_management_command(command, ctx, msg).await
+    async fn process_message(&self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+        if msg.content.starts_with(COMMAND_PREFIX) {
+            self.process_management_command(ctx, msg).await
         } else {
             self.process_user_message(ctx, msg).await
         }
@@ -158,8 +153,12 @@ impl CaretakerFramework {
         !msg.author.bot
     }
 
-    async fn process_management_command(&self, command: &str, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-        let command = match Command::from_iter_safe(shellwords::split(command)?) {
+    async fn process_management_command(&self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+        let cmd_str = msg
+            .content
+            .strip_prefix(COMMAND_PREFIX)
+            .expect("given message content does not start with COMMAND_PREFIX");
+        let command = match Command::from_iter_safe(shellwords::split(cmd_str)?) {
             Ok(c) => c,
             Err(clap::Error { kind, message, .. }) => {
                 warn!("structopt returned {:?} error: {:?}", kind, message);
@@ -180,12 +179,12 @@ impl CaretakerFramework {
             msg.guild_id,
             command
         );
-        command.run(ctx, msg).await?;
-        Ok(())
+        command.run(ctx, msg).await
     }
 
-    async fn process_user_message(&self, _ctx: &Context, msg: &Message) -> anyhow::Result<()> {
-        if self.msg_tx.send(msg.clone()).is_err() {
+    async fn process_user_message(&self, _ctx: &Context, msg: Message) -> anyhow::Result<()> {
+        // dirty short-circuit side-effect
+        if msg.guild_id.is_some() && self.msg_tx.send(Arc::new(msg)).is_err() {
             error!("Sending message to broadcast channel failed (channel closed)");
         }
         Ok(())
@@ -193,7 +192,7 @@ impl CaretakerFramework {
 }
 
 impl Command {
-    async fn run(self, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
 
         match self {
@@ -286,7 +285,7 @@ impl Command {
 }
 
 impl ModuleSubcommand {
-    async fn run(self, mut module: Module, ctx: &Context, msg: &Message) -> anyhow::Result<()> {
+    async fn run(self, mut module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
             .get::<DbConnection>()
@@ -302,7 +301,7 @@ impl ModuleSubcommand {
                 module.set_enabled(enabled, &db)?;
                 module_cache.update(module).await?;
 
-                react_success(ctx, msg).await?;
+                react_success(ctx, &msg).await?;
             }
             ModuleSubcommand::GetEnabled => {
                 msg.channel_id
@@ -353,14 +352,14 @@ impl ModuleSubcommand {
                 };
 
                 module.add_action(action, &db)?;
-                react_success(ctx, msg).await?;
+                react_success(ctx, &msg).await?;
             }
             ModuleSubcommand::RemoveAction { index } => {
                 if module.action_count(&db)? == 0 {
                     msg.channel_id.send_message(ctx, |m| m.content(NO_ACTIONS)).await?;
                 } else {
                     module.remove_nth_action(index, &db)?;
-                    react_success(ctx, msg).await?;
+                    react_success(ctx, &msg).await?;
                 }
             }
         }

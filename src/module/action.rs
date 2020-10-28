@@ -1,8 +1,7 @@
 use diesel_derive_enum::DbEnum;
-use serde_json::json;
 use serenity::{
-    http::Http,
-    model::id::{ChannelId, MessageId},
+    model::{channel::Message, id::ChannelId},
+    CacheAndHttp,
 };
 use std::borrow::Cow;
 use strum::{Display, EnumMessage, EnumString};
@@ -52,33 +51,33 @@ impl<'a> Action<'a> {
 
     pub fn description(&self) -> String {
         match self.kind {
-            ActionKind::Notify => match (&self.message, self.channel) {
-                (None, _) => panic!(format!("invalid action: kind is {} but message is None", self.kind)),
-                (Some(msg), None) => format!("In the same channel with `{}`", msg),
-                (Some(msg), Some(channel)) => format!("In <#{}> with `{}`", channel, msg),
-            },
             ActionKind::RemoveMessage => {
                 // Discord requires the embed field to always have *some* value but they don't document the requirement
                 // anywhere. omitting the value has Discord respond with a very unhelpful error message that Serenity
                 // can't do anything with, other than complain about invalid JSON
                 String::from("Remove the message, nothing special about it")
             }
+            ActionKind::Notify => match (&self.message, self.channel) {
+                (None, _) => panic!(format!("invalid action: kind is {} but message is None", self.kind)),
+                (Some(msg), None) => format!("In the same channel with `{}`", msg),
+                (Some(msg), Some(channel)) => format!("In <#{}> with `{}`", channel, msg),
+            },
         }
     }
 
-    pub async fn run(&self, http: &Http, channel: ChannelId, msg: MessageId) -> anyhow::Result<()> {
+    pub async fn run(&self, cache_http: &CacheAndHttp, msg: &Message) -> anyhow::Result<()> {
         match self.kind {
             ActionKind::RemoveMessage => {
-                http.delete_message(channel.0, msg.0).await?;
+                msg.delete(cache_http).await?;
             }
             ActionKind::Notify => {
                 let message = self.message.clone().expect("missing message in action");
-                let value = json!({ "content": message });
 
                 match self.channel {
-                    Some(notify_channel) => http.send_message(notify_channel.0, &value),
-                    None => http.send_message(channel.0, &value),
+                    Some(notify_channel) => notify_channel,
+                    None => msg.channel_id,
                 }
+                .send_message(&cache_http.http, |m| m.content(message))
                 .await?;
             }
         }

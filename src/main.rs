@@ -18,11 +18,11 @@ use error::InternalError;
 use framework::CaretakerFramework;
 use log::*;
 use matcher::MatcherResponse;
-use module::cache::ModuleCache;
+use module::{action::Action, cache::ModuleCache};
 use serde::Deserialize;
 use serenity::{
     async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
-    model::prelude::*, prelude::*, Client,
+    model::prelude::*, prelude::*, CacheAndHttp, Client,
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -208,7 +208,7 @@ fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
     Ok(db_conn)
 }
 
-async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Message>) -> anyhow::Result<Client> {
+async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Message>>) -> anyhow::Result<Client> {
     debug!("Initialising Discord client...");
 
     let http = Http::new_with_token(token);
@@ -304,12 +304,12 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
         data.get::<DbConnection>()
             .ok_or(InternalError::MissingUserdata("DbConnection"))?,
     );
-    let cache_and_http = Arc::clone(&client.cache_and_http);
+    let cache_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {
         debug!("Starting action handler loop");
         loop {
-            let (kind, guild, channel, message) = match rx.recv().await {
+            let (kind, msg) = match rx.recv().await {
                 Some(r) => r,
                 None => {
                     error!("Matcher response channel closed");
@@ -317,11 +317,19 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 }
             };
 
-            let module = module_cache.get(guild, kind).await;
+            let guild_id = match msg.guild_id {
+                Some(id) => id,
+                None => {
+                    warn!("Missing guild in action handler message (is the message a DM?)");
+                    continue;
+                }
+            };
+
+            let module = module_cache.get(guild_id, kind).await;
             if module.enabled() {
                 debug!(
                     "Running actions for guild {} module {} message {}",
-                    guild, kind, message
+                    guild_id, kind, msg.id
                 );
 
                 let db = db_arc.lock().await;
@@ -333,19 +341,33 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                     }
                 };
 
-                let start = Instant::now();
                 for action in actions {
-                    if let Err(e) = action.run(&cache_and_http.http, channel, message).await {
-                        error!(
-                            "Failed to run module {:?} {:?} action against guild {} channel {} message {}: {}",
-                            kind, action, guild, channel, message, e
-                        );
-                    }
+                    spawn_action_runner(action, Arc::clone(&cache_http), Arc::clone(&msg));
                 }
-                debug!("Actions performed in {:?}", start.elapsed());
             }
         }
     });
 
     Ok(())
+}
+
+fn spawn_action_runner(action: Action<'static>, cache_http: Arc<CacheAndHttp>, msg: Arc<Message>) {
+    tokio::spawn(async move {
+        let start = Instant::now();
+        if let Err(e) = action.run(&cache_http, &msg).await {
+            error!(
+                "Failed to run {:?} against guild {:?} channel {} message {}: {}",
+                action, msg.guild_id, msg.channel_id, msg.id, e
+            );
+        }
+
+        debug!(
+            "Running {:?} against guild {:?} channel {} message {} took {:?}",
+            action,
+            msg.guild_id,
+            msg.channel_id,
+            msg.id,
+            start.elapsed()
+        );
+    });
 }

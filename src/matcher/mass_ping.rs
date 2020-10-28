@@ -6,11 +6,11 @@ pub struct MassPing {}
 
 #[async_trait]
 impl Matcher for MassPing {
-    fn for_module_kind() -> ModuleKind {
-        ModuleKind::MassPing
+    fn build() -> (ModuleKind, Self) {
+        (ModuleKind::MassPing, Self {})
     }
 
-    async fn is_match(msg: &Message) -> bool {
+    async fn is_match(&self, msg: &Message) -> bool {
         // this catches both @everyone and @here
         msg.mention_everyone
     }

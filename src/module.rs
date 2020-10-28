@@ -149,7 +149,13 @@ impl Module {
         Ok(())
     }
 
-    pub fn get_actions(self, db: &PgConnection) -> anyhow::Result<Vec<Action>> {
+    // since an Action may contain borrowed data in the message Cow, it has to always have its lifetime specified. in
+    // this function's case, the Rust compiler simply infers the action's lifetime to be that of the database connection
+    // reference's, which is incorrect (they don't share any data via reference). by specifying the 'static lifetime for
+    // the returning action, it is "locked" to always containing only owned data (or the borrowed data would have to
+    // be 'static as well). this function returns only new action objects that contain only owned data, so the
+    // lifetime is valid
+    pub fn get_actions(self, db: &PgConnection) -> anyhow::Result<Vec<Action<'static>>> {
         use schema::actions;
 
         let mut actions = Vec::new();
