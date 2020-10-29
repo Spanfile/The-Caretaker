@@ -113,6 +113,11 @@ impl Framework for CaretakerFramework {
         }
 
         debug!("{:#?}", msg);
+        debug!(
+            "Dispatch called {}ms later from message timestamp ({})",
+            (Utc::now() - msg.timestamp).num_milliseconds(),
+            msg.timestamp
+        );
 
         let channel_id = msg.channel_id;
         let start = Instant::now();
