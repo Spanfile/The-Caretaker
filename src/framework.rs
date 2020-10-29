@@ -117,18 +117,22 @@ impl Framework for CaretakerFramework {
         let channel_id = msg.channel_id;
         let start = Instant::now();
         if let Err(e) = self.process_message(&ctx, msg).await {
-            error!("Message processing failed: {}", e);
+            warn!("Message processing failed: {}", e);
 
-            if e.downcast_ref::<ArgumentError>().is_some() {
-                if let Err(e) = channel_id
-                    .send_message(&ctx, |m| {
-                        argument_error_message(e, m);
-                        m
-                    })
-                    .await
-                {
-                    error!("Failed to send error message to channel {}: {}", channel_id, e);
-                }
+            if let Err(e) = channel_id
+                .send_message(&ctx, |m| {
+                    if let Some(clap::Error { message, .. }) = e.downcast_ref() {
+                        codeblock_message(message, m);
+                    } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
+                        argument_error_message(*e, m);
+                    } else {
+                        internal_error_message(e, m);
+                    }
+                    m
+                })
+                .await
+            {
+                error!("Failed to send error message to channel {}: {}", channel_id, e);
             }
         }
 
@@ -158,19 +162,7 @@ impl CaretakerFramework {
             .content
             .strip_prefix(COMMAND_PREFIX)
             .expect("given message content does not start with COMMAND_PREFIX");
-        let command = match Command::from_iter_safe(shellwords::split(cmd_str)?) {
-            Ok(c) => c,
-            Err(clap::Error { kind, message, .. }) => {
-                warn!("structopt returned {:?} error: {:?}", kind, message);
-                msg.channel_id
-                    .send_message(&ctx, |m| {
-                        codeblock_message(&message, m);
-                        m
-                    })
-                    .await?;
-                return Ok(());
-            }
-        };
+        let command = Command::from_iter_safe(shellwords::split(cmd_str)?)?;
 
         info!(
             "{} ({}) ({:?}): {:?}",
@@ -240,7 +232,7 @@ impl Command {
                     .await?;
             }
             Command::Module { module, subcommand } => {
-                let guild_id = msg.guild_id.ok_or(InternalError::NoGuildId)?;
+                let guild_id = msg.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
                 let db = data
                     .get::<DbConnection>()
                     .ok_or(InternalError::MissingUserdata("DbConnection"))?
@@ -380,11 +372,8 @@ where
     });
 }
 
-fn argument_error_message<E>(err: E, m: &mut CreateMessage<'_>)
-where
-    E: AsRef<dyn std::error::Error>,
-{
-    m.content(format!("{} {}", UNICODE_CROSS, err.as_ref()));
+fn argument_error_message(e: ArgumentError, m: &mut CreateMessage<'_>) {
+    m.content(format!("{} {}", UNICODE_CROSS, e));
 }
 
 fn codeblock_message(message: &str, m: &mut CreateMessage<'_>) {
