@@ -46,11 +46,14 @@ enum Command {
     /// Configure the various Caretaker modules
     Module {
         /// The name of the module to configure
+        // TODO: the required_ifs don't work
         #[structopt(
             possible_values(ModuleKind::VARIANTS),
             required_ifs(&[
-                ("subcommand", "enable"),
-                ("subcommand", "disable")
+                ("subcommand", "set-enabled"),
+                ("subcommand", "get-actions"),
+                ("subcommand", "add-action"),
+                ("subcommand", "remove-action"),
             ])
         )]
         module: Option<ModuleKind>,
@@ -163,10 +166,9 @@ impl CaretakerFramework {
     }
 
     async fn process_management_command(&self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
-        let cmd_str = msg
-            .content
-            .strip_prefix(COMMAND_PREFIX)
-            .expect("given message content does not start with COMMAND_PREFIX");
+        let cmd_str = msg.content.strip_prefix(COMMAND_PREFIX).ok_or_else(|| {
+            InternalError::ImpossibleCase(String::from("given message content does not start with COMMAND_PREFIX"))
+        })?;
         let command = Command::from_iter_safe(shellwords::split(cmd_str)?)?;
 
         info!(
@@ -269,10 +271,13 @@ impl Command {
                             })
                             .await?;
                     }
-                    (m, s) => panic!(
-                        "impossible case while running module subcommand: module is {:?} and subcommand is {:?}",
-                        m, s
-                    ),
+                    (m, s) => {
+                        return Err(InternalError::ImpossibleCase(format!(
+                            "module is {:?} and subcommand is {:?}",
+                            m, s
+                        ))
+                        .into())
+                    }
                 };
             }
         };
@@ -338,13 +343,24 @@ impl ModuleSubcommand {
                 message,
             } => {
                 let action = match action {
-                    ActionKind::Notify { .. } => Action::notify(
-                        in_channel,
-                        message
-                            .as_deref()
-                            .map(Cow::Borrowed)
-                            .expect("message is None while ActionKind is Notify. this shouldn't happen"),
-                    ),
+                    ActionKind::Notify => {
+                        if let Some(in_channel) = in_channel {
+                            let channels = module.guild().channels(ctx).await?;
+                            if !channels.contains_key(&in_channel) {
+                                return Err(ArgumentError::ChannelNotInGuild(in_channel).into());
+                            }
+                        }
+
+                        Action::notify(
+                            in_channel,
+                            message.as_deref().map(Cow::Borrowed).ok_or_else(|| {
+                                InternalError::ImpossibleCase(format!(
+                                    "message is {:?} while ActionKind is {}",
+                                    message, action
+                                ))
+                            })?,
+                        )
+                    }
                     ActionKind::RemoveMessage => Action::remove_message(),
                 };
 

@@ -6,6 +6,8 @@ use serenity::{
 use std::borrow::Cow;
 use strum::{Display, EnumMessage, EnumString};
 
+use crate::error::InternalError;
+
 // the database schema holds its own version of this enum, remember to modify it as well if modying this one
 #[derive(Debug, EnumString, EnumMessage, Display, Copy, Clone, DbEnum)]
 #[strum(serialize_all = "kebab-case")]
@@ -71,7 +73,10 @@ impl<'a> Action<'a> {
                 msg.delete(cache_http).await?;
             }
             ActionKind::Notify => {
-                let message = self.message.clone().expect("missing message in action");
+                let message = self
+                    .message
+                    .clone()
+                    .ok_or_else(|| InternalError::ImpossibleCase(String::from("missing message in action")))?;
 
                 match self.channel {
                     Some(notify_channel) => notify_channel,
