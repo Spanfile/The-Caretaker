@@ -138,6 +138,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "circular-queue"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
+dependencies = [
+ "version_check",
+]
+
+[[package]]
 name = "clap"
 version = "2.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -441,6 +450,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "644f9158b2f133fd50f5fb3242878846d9eb792e445c893805ff0e3824006e35"
+
+[[package]]
 name = "http"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -720,6 +735,15 @@ dependencies = [
  "cfg-if 0.1.10",
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "nilsimsa"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39fb461144c99c7e31d9f7dc0a0bcaeee47ffb46ebc4e55b7116524cf7bcbec"
+dependencies = [
+ "hex",
 ]
 
 [[package]]
@@ -1230,6 +1254,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "circular-queue",
  "diesel",
  "diesel-derive-enum",
  "diesel_migrations",
@@ -1238,6 +1263,7 @@ dependencies = [
  "fern",
  "humantime",
  "log",
+ "nilsimsa",
  "serde",
  "serenity",
  "shellwords",

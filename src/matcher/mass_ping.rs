@@ -10,7 +10,7 @@ impl Matcher for MassPing {
         (ModuleKind::MassPing, Self {})
     }
 
-    async fn is_match(&self, msg: &Message) -> bool {
+    async fn is_match(&mut self, msg: &Message) -> bool {
         // this catches both @everyone and @here
         msg.mention_everyone
     }
