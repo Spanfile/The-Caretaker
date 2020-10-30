@@ -16,7 +16,7 @@ envy = "0.4.1"
 fern = "0.6.0"
 humantime = "2.0.1"
 log = "0.4.11"
-nilsimsa = "0.1.1"
+nilsimsa = "0.2.0"
 serde = {version = "1.0.117", features = ["derive"]}
 serenity = "0.9.0-rc.4"
 shellwords = "1.1.0"

@@ -68,7 +68,7 @@ impl History {
         self.history.push(History::hash(message));
     }
 
-    fn compare(&self, message: &str, threshold: u8) -> bool {
+    fn compare(&self, message: &str, threshold: i16) -> bool {
         let hash = History::hash(message);
         for hist in self.history.iter() {
             let comparison = nilsimsa::compare(&hash, hist);

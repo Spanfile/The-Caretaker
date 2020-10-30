@@ -739,9 +739,9 @@ dependencies = [
 
 [[package]]
 name = "nilsimsa"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b39fb461144c99c7e31d9f7dc0a0bcaeee47ffb46ebc4e55b7116524cf7bcbec"
+checksum = "db4450fab923504514b55c083ad362af32ce1333b034a1e938cf37cde75140df"
 dependencies = [
  "hex",
 ]
