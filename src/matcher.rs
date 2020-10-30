@@ -20,6 +20,10 @@ trait Matcher {
     async fn is_match(&mut self, msg: &Message) -> bool;
 }
 
+// because the macro `matchers` always copies the action_tx, the original given action_tx isn't consumed, just cloned a
+// bunch of times and dropped at the end as its ownership ends. this is wanted behaviour, since this way the only
+// instances of the action_tx are in the matcher tasks and there won't be any dangling ones
+#[allow(clippy::clippy::needless_pass_by_value)]
 pub fn spawn_message_matchers(msg_tx: &broadcast::Sender<Arc<Message>>, action_tx: mpsc::Sender<MatcherResponse>) {
     macro_rules! matchers {
         ($($matcher:ty),+) => {

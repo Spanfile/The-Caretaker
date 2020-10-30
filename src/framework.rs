@@ -111,7 +111,7 @@ pub struct CaretakerFramework {
 impl Framework for CaretakerFramework {
     async fn dispatch(&self, ctx: Context, msg: Message) {
         // straight-up ignore bot messages
-        if !self.is_from_user(&msg) {
+        if !is_from_user(&msg) {
             return;
         }
 
@@ -159,10 +159,6 @@ impl CaretakerFramework {
         } else {
             self.process_user_message(ctx, msg).await
         }
-    }
-
-    fn is_from_user(&self, msg: &Message) -> bool {
-        !msg.author.bot
     }
 
     async fn process_management_command(&self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
@@ -220,11 +216,7 @@ impl Command {
                             e.field("Shard uptime", format!("{}", format_duration(own_uptime)), true);
 
                             if let Some(latency) = own_shard.latency {
-                                e.field(
-                                    "GW latency",
-                                    format!("{}ms", latency.as_micros() as f32 / 1000f32),
-                                    true,
-                                );
+                                e.field("GW latency", format!("{:?}", latency), true);
                             } else {
                                 e.field("GW latency", "n/a", true);
                             }
@@ -364,7 +356,7 @@ impl ModuleSubcommand {
                     ActionKind::RemoveMessage => Action::remove_message(),
                 };
 
-                module.add_action(action, &db)?;
+                module.add_action(&action, &db)?;
                 react_success(ctx, &msg).await?;
             }
             ModuleSubcommand::RemoveAction { index } => {
@@ -412,4 +404,8 @@ fn enabled_string(enabled: bool) -> String {
     } else {
         format!("{} disabled", UNICODE_CROSS)
     }
+}
+
+fn is_from_user(msg: &Message) -> bool {
+    !msg.author.bot
 }

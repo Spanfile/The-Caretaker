@@ -1,3 +1,8 @@
+#![warn(clippy::if_not_else)]
+#![warn(clippy::needless_pass_by_value)]
+#![warn(clippy::non_ascii_literal)]
+#![warn(clippy::panic_in_result_fn)]
+
 // ew what is this, rust 2015?
 #[macro_use]
 extern crate diesel;
@@ -12,6 +17,11 @@ mod matcher;
 mod models;
 mod module;
 mod schema;
+mod migrations {
+    #![allow(clippy::panic_in_result_fn)]
+    pub use embedded_migrations::*;
+    embed_migrations!();
+}
 
 use diesel::{pg::PgConnection, prelude::*};
 use error::InternalError;
@@ -36,8 +46,6 @@ use tokio::{
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-embed_migrations!();
-
 #[derive(Deserialize, Debug)]
 #[serde(default)]
 struct Config {
@@ -50,9 +58,9 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            discord_token: Default::default(),
-            log_level: Default::default(),
-            database_url: Default::default(),
+            discord_token: String::default(),
+            log_level: logging::LogLevel::default(),
+            database_url: String::default(),
             // serenity seems to update a shard's latency every 40 seconds so round it up to a nice one minute
             latency_update_freq_ms: 60_000,
         }
@@ -111,12 +119,12 @@ impl EventHandler for Handler {
 
     async fn shard_stage_update(&self, ctx: Context, update: ShardStageUpdateEvent) {
         info!(
-            "Shard {} transitioned from {} to {}",
+            "Shard {} transitioned from {} to {}",
             update.shard_id, update.old, update.new
         );
 
         if let (ConnectionStage::Resuming, ConnectionStage::Connected) = (update.old, update.new) {
-            info!("Shard {} reconnected, resetting last connected time", update.shard_id);
+            info!("Shard {} reconnected, resetting last connected time", update.shard_id);
             self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
         }
     }
@@ -204,7 +212,7 @@ fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
     debug!("Establishing database connection to {}...", url);
 
     let db_conn = PgConnection::establish(url)?;
-    embedded_migrations::run(&db_conn)?;
+    migrations::run(&db_conn)?;
     Ok(db_conn)
 }
 
@@ -235,7 +243,7 @@ async fn populate_userdata(client: &Client, db: PgConnection) -> anyhow::Result<
     let mut data = client.data.write().await;
 
     data.insert::<ModuleCache>(ModuleCache::populate_from_db(&db)?);
-    data.insert::<ShardMetadata>(Default::default());
+    data.insert::<ShardMetadata>(HashMap::default());
     data.insert::<DbConnection>(Arc::new(Mutex::new(db)));
     data.insert::<BotUptime>(Instant::now());
 
@@ -309,20 +317,18 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
     tokio::spawn(async move {
         debug!("Starting action handler loop");
         loop {
-            let (kind, msg) = match rx.recv().await {
-                Some(r) => r,
-                None => {
-                    error!("Matcher response channel closed");
-                    return;
-                }
+            let (kind, msg) = if let Some(r) = rx.recv().await {
+                r
+            } else {
+                error!("Matcher response channel closed");
+                return;
             };
 
-            let guild_id = match msg.guild_id {
-                Some(id) => id,
-                None => {
-                    warn!("Missing guild in action handler message (is the message a DM?)");
-                    continue;
-                }
+            let guild_id = if let Some(id) = msg.guild_id {
+                id
+            } else {
+                warn!("Missing guild in action handler message (is the message a DM?)");
+                continue;
             };
 
             let module = module_cache.get(guild_id, kind).await;
@@ -356,13 +362,13 @@ fn spawn_action_runner(action: Action<'static>, cache_http: Arc<CacheAndHttp>, m
         let start = Instant::now();
         if let Err(e) = action.run(&cache_http, &msg).await {
             error!(
-                "Failed to run {:?} against guild {:?} channel {} message {}: {}",
+                "Failed to run {:?} against guild {:?} channel {} message {}: {}",
                 action, msg.guild_id, msg.channel_id, msg.id, e
             );
         }
 
         debug!(
-            "Running {:?} against guild {:?} channel {} message {} took {:?}",
+            "Running {:?} against guild {:?} channel {} message {} took {:?}",
             action,
             msg.guild_id,
             msg.channel_id,

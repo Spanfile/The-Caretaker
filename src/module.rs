@@ -183,7 +183,7 @@ impl Module {
         Ok(actions)
     }
 
-    pub fn add_action(self, action: Action, db: &PgConnection) -> anyhow::Result<i32> {
+    pub fn add_action(self, action: &Action, db: &PgConnection) -> anyhow::Result<i32> {
         use schema::actions;
 
         let action_model = match action.kind {
