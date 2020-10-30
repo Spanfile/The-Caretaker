@@ -1,5 +1,5 @@
 use super::Matcher;
-use crate::module::ModuleKind;
+use crate::module::{cache::ModuleCache, ModuleKind};
 use chrono::{DateTime, Duration, Utc};
 use circular_queue::CircularQueue;
 use log::*;
@@ -10,13 +10,19 @@ use serenity::{
         channel::Message,
         id::{ChannelId, GuildId, UserId},
     },
+    prelude::TypeMap,
 };
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
+use tokio::sync::RwLock;
 
 const HISTORY_SIZE: usize = 3;
 
 pub struct Crosspost {
     msg_history: HashMap<(GuildId, UserId), History>,
+    module_cache: ModuleCache,
 }
 
 #[derive(Debug)]
@@ -33,11 +39,17 @@ struct MessageInformation {
 
 #[async_trait]
 impl Matcher for Crosspost {
-    fn build() -> (ModuleKind, Self) {
+    async fn build(userdata: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self) {
         (
             ModuleKind::Crosspost,
             Self {
                 msg_history: HashMap::new(),
+                module_cache: userdata
+                    .read()
+                    .await
+                    .get::<ModuleCache>()
+                    .expect("missing userdata ModuleCache")
+                    .clone(),
             },
         )
     }

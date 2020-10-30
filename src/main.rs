@@ -35,7 +35,7 @@ use serenity::{
     model::prelude::*, prelude::*, CacheAndHttp, Client,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -97,11 +97,12 @@ impl EventHandler for Handler {
         if let Some(s) = ready.shard {
             let (shard, shards) = (s[0], s[1]);
             info!(
-                "Shard {}/{} ready! # of guilds: {}. Session ID: {}",
+                "Shard {}/{} ready! # of guilds: {}. Session ID: {}. Connected as {}",
                 shard + 1,
                 shards,
                 ready.guilds.len(),
                 ready.session_id,
+                ready.user.tag()
             );
 
             self.set_info_activity(&ctx, shard, shards).await;
@@ -187,14 +188,16 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting...");
     debug!("{:#?}", config);
 
+    let db_conn = establish_database_connection(&config.database_url)?;
+    let module_cache = ModuleCache::populate_from_db(&db_conn)?;
+
     let (msg_tx, _) = broadcast::channel(64);
     let (action_tx, action_rx) = mpsc::channel(8);
-    matcher::spawn_message_matchers(&msg_tx, action_tx);
 
-    let mut client = create_discord_client(&config.discord_token, msg_tx).await?;
-    let db_conn = establish_database_connection(&config.database_url)?;
+    let mut client = create_discord_client(&config.discord_token, msg_tx.clone()).await?;
+    populate_userdata(&client, module_cache, db_conn).await?;
 
-    populate_userdata(&client, db_conn).await?;
+    matcher::spawn_message_matchers(msg_tx, action_tx, client.data.clone());
     spawn_action_handler(&client, action_rx).await?;
     spawn_shard_latency_ticker(&client, config.latency_update_freq_ms);
     spawn_termination_waiter(&client);
@@ -220,15 +223,10 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     debug!("Initialising Discord client...");
 
     let http = Http::new_with_token(token);
-    let (owners, bot_id) = http.get_current_application_info().await.map(|info| {
-        let mut owners = HashSet::new();
-        owners.insert(info.owner.id);
+    let appinfo = http.get_current_application_info().await?;
 
-        (owners, info.id)
-    })?;
-
-    debug!("Own ID: {}", bot_id);
-    debug!("Owners: {:#?}", owners);
+    debug!("{:#?}", appinfo);
+    info!("Connected with application {}. Own ID: {}", appinfo.name, appinfo.id);
 
     let framework = CaretakerFramework::new(msg_tx);
     let client = Client::builder(token)
@@ -238,11 +236,11 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     Ok(client)
 }
 
-async fn populate_userdata(client: &Client, db: PgConnection) -> anyhow::Result<()> {
+async fn populate_userdata(client: &Client, module_cache: ModuleCache, db: PgConnection) -> anyhow::Result<()> {
     debug!("Populating userdata...");
     let mut data = client.data.write().await;
 
-    data.insert::<ModuleCache>(ModuleCache::populate_from_db(&db)?);
+    data.insert::<ModuleCache>(module_cache);
     data.insert::<ShardMetadata>(HashMap::default());
     data.insert::<DbConnection>(Arc::new(Mutex::new(db)));
     data.insert::<BotUptime>(Instant::now());

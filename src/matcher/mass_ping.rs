@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use super::Matcher;
 use crate::module::ModuleKind;
-use serenity::{async_trait, model::channel::Message};
+use serenity::{async_trait, model::channel::Message, prelude::TypeMap};
+use tokio::sync::RwLock;
 
 pub struct MassPing {}
 
 #[async_trait]
 impl Matcher for MassPing {
-    fn build() -> (ModuleKind, Self) {
+    async fn build(_: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self) {
         (ModuleKind::MassPing, Self {})
     }
 

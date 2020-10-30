@@ -224,8 +224,7 @@ impl Command {
                             // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
                             // which will construct the timestamp string out of it.`, but serenity itself implements the
                             // conversion only for references to datetimes, not datetimes directly
-                            e.timestamp(&Utc::now());
-                            e
+                            e.timestamp(&Utc::now())
                         })
                     })
                     .await?;
