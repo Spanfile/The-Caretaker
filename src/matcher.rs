@@ -62,9 +62,11 @@ where
         let start = Instant::now();
         if matcher.is_match(&msg).await {
             debug!(
-                "{}: matched '{}' by {} in {:?}",
+                "{}: matched message {} in channel {} in guild {:?} by {} in {:?}",
                 module,
-                msg.content,
+                msg.id,
+                msg.channel_id,
+                msg.guild_id,
                 msg.author.id,
                 start.elapsed()
             );
