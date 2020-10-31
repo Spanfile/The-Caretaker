@@ -1,6 +1,6 @@
 use super::Matcher;
 use crate::{
-    module::{cache::ModuleCache, settings::Settings, ModuleKind},
+    module::{cache::ModuleCache, settings::CrosspostSettings, ModuleKind},
     DbConnection,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -67,19 +67,17 @@ impl Matcher for Crosspost {
                 ModuleKind::Crosspost,
             )
             .await;
-        let settings = module.get_settings(&db).expect("failed to get settings for module");
+        let settings: CrosspostSettings = module
+            .get_settings(&db)
+            .expect("failed to get settings for module")
+            .try_into()
+            .unwrap();
 
         let content = &msg.content;
 
         // .len() on a string returns its length in bytes, not in graphemes, so messages such as 'äää' would be
         // considered since its length is six bytes, but only three characters
-        if content.len()
-            < settings
-                .get("minimum_length")
-                .expect("failed to get minimum length setting")
-                .try_into()
-                .expect("failed to read minimum length setting as usize")
-        {
+        if content.len() < settings.minimum_length {
             debug!("Not matching a message of length {}", content.len());
             return false;
         }
@@ -88,21 +86,7 @@ impl Matcher for Crosspost {
             Entry::Occupied(mut entry) => {
                 let history = entry.get_mut();
 
-                if history.compare(
-                    msg,
-                    settings
-                        .get("threshold")
-                        .expect("failed to get threshold setting")
-                        .try_into()
-                        .expect("failed to read threshold setting as u16"),
-                    Duration::seconds(
-                        settings
-                            .get("timeout")
-                            .expect("failed to get timeout setting")
-                            .try_into()
-                            .expect("failed to read timeout setting as usize"),
-                    ),
-                ) {
+                if history.compare(msg, settings.threshold, Duration::seconds(settings.timeout)) {
                     return true;
                 } else {
                     history.push(msg);

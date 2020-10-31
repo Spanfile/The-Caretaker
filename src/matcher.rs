@@ -68,15 +68,13 @@ async fn run_matcher<M>(
         };
 
         let start = Instant::now();
-        if matcher.is_match(&msg).await {
+        let matched = matcher.is_match(&msg).await;
+        debug!("{}: returned match in {:?}", module, start.elapsed());
+
+        if matched {
             debug!(
-                "{}: matched message {} in channel {} in guild {:?} by {} in {:?}",
-                module,
-                msg.id,
-                msg.channel_id,
-                msg.guild_id,
-                msg.author.id,
-                start.elapsed()
+                "{}: matched message {} in channel {} in guild {:?} by {}",
+                module, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
             );
 
             if tx.send((module, msg)).await.is_err() {

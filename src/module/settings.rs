@@ -1,80 +1,37 @@
 use super::ModuleKind;
-use crate::{
-    error::{InternalError, SettingsError},
-    models,
-};
-use enum_dispatch::enum_dispatch;
+use crate::{error::InternalError, models};
 use std::convert::TryFrom;
 
-#[enum_dispatch]
-pub trait Settings {
-    fn get(&self, setting: &'static str) -> Result<SettingValue, SettingsError>;
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Copy, Clone)]
-pub enum SettingValue {
-    usize(usize),
-    i16(i16),
-    i64(i64),
-}
-
-#[enum_dispatch(Settings)]
 #[derive(Debug)]
 pub enum ModuleSettings {
-    MassPingSettings,
-    CrosspostSettings,
-    DynamicSlowmodeSettings,
-    UserSlowmodeSettings,
-    EmojiSpamSettings,
-    MentionSpamSettings,
-    SelfbotSettings,
-    InviteLinkSettings,
+    MassPingSettings(MassPingSettings),
+    CrosspostSettings(CrosspostSettings),
+    DynamicSlowmodeSettings(DynamicSlowmodeSettings),
+    UserSlowmodeSettings(UserSlowmodeSettings),
+    EmojiSpamSettings(EmojiSpamSettings),
+    MentionSpamSettings(MentionSpamSettings),
+    SelfbotSettings(SelfbotSettings),
+    InviteLinkSettings(InviteLinkSettings),
 }
 
 impl ModuleSettings {
     pub fn from_db_rows(module: ModuleKind, rows: &[models::ModuleSetting]) -> anyhow::Result<Self> {
         match module {
-            ModuleKind::MassPing => Ok(MassPingSettings::from_db_rows(rows)?.into()),
-            ModuleKind::Crosspost => Ok(CrosspostSettings::from_db_rows(rows)?.into()),
-            ModuleKind::DynamicSlowmode => Ok(DynamicSlowmodeSettings::from_db_rows(rows)?.into()),
-            ModuleKind::UserSlowmode => Ok(UserSlowmodeSettings::from_db_rows(rows)?.into()),
-            ModuleKind::EmojiSpam => Ok(EmojiSpamSettings::from_db_rows(rows)?.into()),
-            ModuleKind::MentionSpam => Ok(MentionSpamSettings::from_db_rows(rows)?.into()),
-            ModuleKind::Selfbot => Ok(SelfbotSettings::from_db_rows(rows)?.into()),
-            ModuleKind::InviteLink => Ok(InviteLinkSettings::from_db_rows(rows)?.into()),
+            ModuleKind::MassPing => Ok(Self::MassPingSettings(MassPingSettings::from_db_rows(rows)?)),
+            ModuleKind::Crosspost => Ok(Self::CrosspostSettings(CrosspostSettings::from_db_rows(rows)?)),
+            ModuleKind::DynamicSlowmode => Ok(Self::DynamicSlowmodeSettings(DynamicSlowmodeSettings::from_db_rows(
+                rows,
+            )?)),
+            ModuleKind::UserSlowmode => Ok(Self::UserSlowmodeSettings(UserSlowmodeSettings::from_db_rows(rows)?)),
+            ModuleKind::EmojiSpam => Ok(Self::EmojiSpamSettings(EmojiSpamSettings::from_db_rows(rows)?)),
+            ModuleKind::MentionSpam => Ok(Self::MentionSpamSettings(MentionSpamSettings::from_db_rows(rows)?)),
+            ModuleKind::Selfbot => Ok(Self::SelfbotSettings(SelfbotSettings::from_db_rows(rows)?)),
+            ModuleKind::InviteLink => Ok(Self::InviteLinkSettings(InviteLinkSettings::from_db_rows(rows)?)),
         }
     }
 }
 
-macro_rules! from_impls {
-    ($($type:ident),+) => {
-        $(
-            impl From<$type> for SettingValue {
-                fn from(val: $type) -> Self {
-                    Self::$type(val)
-                }
-            }
-
-            impl TryFrom<SettingValue> for $type {
-                type Error = SettingsError;
-
-                fn try_from(val: SettingValue) -> Result<Self, Self::Error> {
-                    if let SettingValue::$type(val) = val {
-                        Ok(val)
-                    } else {
-                        Err(SettingsError::InvalidType {
-                            value: val,
-                            ty: "$type",
-                        })
-                    }
-                }
-            }
-        )+
-    };
-}
-
-macro_rules! empty_settings {
+macro_rules! create_empty_settings {
     ($($settings:ident),+) => {
         $(
             #[derive(Debug, Default)]
@@ -84,20 +41,15 @@ macro_rules! empty_settings {
                     Ok(Self {})
                 }
             }
-            impl Settings for $settings {
-                fn get(&self, setting: &'static str) -> Result<SettingValue, SettingsError> {
-                    Err(SettingsError::NoSuchSetting(setting))
-                }
-            }
         )+
     };
 }
 
-macro_rules! settings {
+macro_rules! create_settings {
     ($name:ident, $(($setting_name:ident: $setting_type:ty => $default:expr)),+) => {
         #[derive(Debug)]
         pub struct $name {
-            $($setting_name: $setting_type,)+
+            $(pub $setting_name: $setting_type,)+
         }
 
         impl Default for $name {
@@ -118,21 +70,27 @@ macro_rules! settings {
                 Ok(new_self)
             }
         }
-
-        impl Settings for $name {
-            fn get(&self, setting: &'static str) -> Result<SettingValue, SettingsError> {
-                match setting {
-                    $(stringify!($setting_name) => Ok(self.$setting_name.into()),)+
-                    _ => Err(SettingsError::NoSuchSetting(setting)),
-                }
-            }
-        }
     };
 }
 
-from_impls!(usize, i16, i64);
+macro_rules! setting_from_impls {
+    ($($name:ident),+) => {
+        $(
+            impl TryFrom<ModuleSettings> for $name {
+                type Error = InternalError;
 
-empty_settings!(
+                fn try_from(settings: ModuleSettings) -> Result<Self, Self::Error> {
+                    match settings {
+                        ModuleSettings::$name(s) => Ok(s),
+                        _ => Err(InternalError::ImpossibleCase(format!("attempt to ")))
+                    }
+                }
+            }
+        )+
+    };
+}
+
+create_empty_settings!(
     MassPingSettings,
     DynamicSlowmodeSettings,
     UserSlowmodeSettings,
@@ -142,9 +100,20 @@ empty_settings!(
     InviteLinkSettings
 );
 
-settings!(
+create_settings!(
     CrosspostSettings,
     (minimum_length: usize => 5),
     (threshold: i16 => 80),
     (timeout: i64 => 3600)
+);
+
+setting_from_impls!(
+    MassPingSettings,
+    CrosspostSettings,
+    DynamicSlowmodeSettings,
+    UserSlowmodeSettings,
+    EmojiSpamSettings,
+    MentionSpamSettings,
+    SelfbotSettings,
+    InviteLinkSettings
 );
