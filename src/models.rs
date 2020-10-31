@@ -1,8 +1,8 @@
-use super::schema::{actions, module_settings};
+use super::schema::{actions, modules};
 use crate::module::{action::ActionKind, ModuleKind};
 
 #[derive(Queryable, Insertable, AsChangeset, Debug)]
-pub struct ModuleSetting {
+pub struct Module {
     pub guild: i64,
     pub module: ModuleKind,
     pub enabled: bool,

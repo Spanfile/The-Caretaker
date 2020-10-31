@@ -72,6 +72,6 @@ impl ModuleCache {
             }
         }
 
-        Module::default_for_kind_with_guild(kind, guild)
+        Module::default_with_kind_and_guild(kind, guild)
     }
 }

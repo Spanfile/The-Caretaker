@@ -38,8 +38,8 @@ pub struct Module {
     enabled: bool,
 }
 
-impl From<models::ModuleSetting> for Module {
-    fn from(m: models::ModuleSetting) -> Self {
+impl From<models::Module> for Module {
+    fn from(m: models::Module) -> Self {
         Self {
             guild: GuildId(m.guild as u64),
             kind: m.module,
@@ -49,28 +49,19 @@ impl From<models::ModuleSetting> for Module {
 }
 
 impl Module {
-    fn default_for_kind_with_guild(kind: ModuleKind, guild: GuildId) -> Self {
-        match kind {
-            ModuleKind::MassPing
-            | ModuleKind::Crosspost
-            | ModuleKind::DynamicSlowmode
-            | ModuleKind::UserSlowmode
-            | ModuleKind::EmojiSpam
-            | ModuleKind::MentionSpam
-            | ModuleKind::Selfbot
-            | ModuleKind::InviteLink => Self {
-                guild,
-                kind,
-                enabled: false,
-            },
+    fn default_with_kind_and_guild(kind: ModuleKind, guild: GuildId) -> Self {
+        Self {
+            guild,
+            kind,
+            enabled: false,
         }
     }
 
     pub fn get_all_modules(db: &PgConnection) -> anyhow::Result<Vec<Module>> {
-        use schema::module_settings;
+        use schema::modules;
 
         let mut modules = Vec::new();
-        for m in module_settings::table.load::<models::ModuleSetting>(db)? {
+        for m in modules::table.load::<models::Module>(db)? {
             modules.push(m.into());
         }
 
@@ -78,16 +69,16 @@ impl Module {
     }
 
     pub fn get_all_modules_for_guild(guild: GuildId, db: &PgConnection) -> anyhow::Result<HashMap<ModuleKind, Module>> {
-        use schema::module_settings;
+        use schema::modules;
 
         let mut modules = HashMap::new();
         for kind in ModuleKind::iter() {
-            modules.insert(kind, Module::default_for_kind_with_guild(kind, guild));
+            modules.insert(kind, Module::default_with_kind_and_guild(kind, guild));
         }
 
-        for m in module_settings::table
-            .filter(module_settings::guild.eq(guild.0 as i64))
-            .load::<models::ModuleSetting>(db)?
+        for m in modules::table
+            .filter(modules::guild.eq(guild.0 as i64))
+            .load::<models::Module>(db)?
         {
             modules.insert(m.module, m.into());
         }
@@ -97,17 +88,13 @@ impl Module {
     }
 
     pub fn get_module_for_guild(guild: GuildId, kind: ModuleKind, db: &PgConnection) -> anyhow::Result<Module> {
-        use schema::module_settings;
+        use schema::modules;
 
-        let module = module_settings::table
-            .filter(
-                module_settings::guild
-                    .eq(guild.0 as i64)
-                    .and(module_settings::module.eq(kind)),
-            )
-            .first::<models::ModuleSetting>(db)
+        let module = modules::table
+            .filter(modules::guild.eq(guild.0 as i64).and(modules::module.eq(kind)))
+            .first::<models::Module>(db)
             .optional()?
-            .map_or_else(|| Module::default_for_kind_with_guild(kind, guild), Module::from);
+            .map_or_else(|| Module::default_with_kind_and_guild(kind, guild), Module::from);
 
         debug!("{:#?}", module);
         Ok(module)
@@ -126,10 +113,10 @@ impl Module {
     }
 
     pub fn set_enabled(&mut self, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
-        use schema::module_settings;
+        use schema::modules;
 
         self.enabled = enabled;
-        let enabled_setting = models::ModuleSetting {
+        let enabled_setting = models::Module {
             guild: self.guild.0 as i64,
             module: self.kind,
             enabled,
@@ -137,12 +124,12 @@ impl Module {
 
         // return the inserted row's guild ID but don't store it anywhere, because this way diesel will error if the
         // insert affected no rows
-        diesel::insert_into(module_settings::table)
+        diesel::insert_into(modules::table)
             .values(&enabled_setting)
-            .on_conflict((module_settings::guild, module_settings::module))
+            .on_conflict((modules::guild, modules::module))
             .do_update()
             .set(&enabled_setting)
-            .returning(module_settings::guild)
+            .returning(modules::guild)
             .get_result::<i64>(db)?;
 
         debug!("Insert {:#?}", enabled_setting);

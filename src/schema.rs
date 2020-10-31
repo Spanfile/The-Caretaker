@@ -16,11 +16,14 @@ table! {
     use diesel::sql_types::*;
     use crate::module::dbimport::*;
 
-    module_settings (guild, module) {
+    modules (guild, module) {
         guild -> Int8,
         module -> Module_kind,
         enabled -> Bool,
     }
 }
 
-allow_tables_to_appear_in_same_query!(actions, module_settings,);
+allow_tables_to_appear_in_same_query!(
+    actions,
+    modules,
+);
