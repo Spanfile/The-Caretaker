@@ -1,10 +1,14 @@
 pub mod action;
 pub mod cache;
+pub mod settings;
 pub mod dbimport {
     pub use super::{action::Action_kind, Module_kind};
 }
 
-use self::action::{Action, ActionKind};
+use self::{
+    action::{Action, ActionKind},
+    settings::ModuleSettings,
+};
 use crate::{
     error::{ArgumentError, InternalError},
     models, schema,
@@ -236,5 +240,21 @@ impl Module {
 
         debug!("# actions: {}", count);
         Ok(count)
+    }
+
+    pub fn get_settings(self, db: &PgConnection) -> anyhow::Result<ModuleSettings> {
+        use schema::module_settings;
+
+        let rows = module_settings::table
+            .filter(
+                module_settings::guild
+                    .eq(self.guild.0 as i64)
+                    .and(module_settings::module.eq(self.kind)),
+            )
+            .load::<models::ModuleSetting>(db)?;
+        let settings = ModuleSettings::from_db_rows(self.kind, &rows)?;
+
+        debug!("{:?}", settings);
+        Ok(settings)
     }
 }

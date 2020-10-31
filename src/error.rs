@@ -1,3 +1,4 @@
+use crate::module::settings::SettingValue;
 use serenity::model::id::ChannelId;
 use thiserror::Error;
 
@@ -11,6 +12,8 @@ pub enum InternalError {
     MissingOwnShardMetadata(u64),
     #[error("Missing field '{0}' in model")]
     MissingField(&'static str),
+    #[error("Invalid field '{0}' in model")]
+    InvalidField(&'static str),
     #[error("Impossible case: {0}. This is a bug!")]
     ImpossibleCase(String),
 }
@@ -23,4 +26,17 @@ pub enum ArgumentError {
     NotSupportedInDM,
     #[error("The channel <#{0}> is not in this guild")]
     ChannelNotInGuild(ChannelId),
+}
+
+#[derive(Error, Debug, Copy, Clone)]
+pub enum SettingsError {
+    #[error("No such setting: {0}")]
+    NoSuchSetting(&'static str),
+    #[error("Invalid value: {got}, expected a {wanted_type}")]
+    InvalidValue {
+        got: &'static str,
+        wanted_type: &'static str,
+    },
+    #[error("Cannot read {value:?} as {ty}")]
+    InvalidType { value: SettingValue, ty: &'static str },
 }

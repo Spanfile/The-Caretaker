@@ -1,5 +1,8 @@
 use super::Matcher;
-use crate::module::{cache::ModuleCache, ModuleKind};
+use crate::{
+    module::{cache::ModuleCache, settings::Settings, ModuleKind},
+    DbConnection,
+};
 use chrono::{DateTime, Duration, Utc};
 use circular_queue::CircularQueue;
 use log::*;
@@ -14,6 +17,7 @@ use serenity::{
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
+    convert::TryInto,
     sync::Arc,
 };
 use tokio::sync::RwLock;
@@ -22,7 +26,7 @@ const HISTORY_SIZE: usize = 3;
 
 pub struct Crosspost {
     msg_history: HashMap<(GuildId, UserId), History>,
-    module_cache: ModuleCache,
+    userdata: Arc<RwLock<TypeMap>>,
 }
 
 #[derive(Debug)]
@@ -44,22 +48,38 @@ impl Matcher for Crosspost {
             ModuleKind::Crosspost,
             Self {
                 msg_history: HashMap::new(),
-                module_cache: userdata
-                    .read()
-                    .await
-                    .get::<ModuleCache>()
-                    .expect("missing userdata ModuleCache")
-                    .clone(),
+                userdata,
             },
         )
     }
 
     async fn is_match(&mut self, msg: &Message) -> bool {
+        let userdata = self.userdata.read().await;
+        let module_cache = userdata.get::<ModuleCache>().expect("missing ModuleCache in userdata");
+        let db = userdata
+            .get::<DbConnection>()
+            .expect("missing DbConnection in userdata")
+            .lock()
+            .await;
+        let module = module_cache
+            .get(
+                msg.guild_id.expect("missing guild ID in message"),
+                ModuleKind::Crosspost,
+            )
+            .await;
+        let settings = module.get_settings(&db).expect("failed to get settings for module");
+
         let content = &msg.content;
 
         // .len() on a string returns its length in bytes, not in graphemes, so messages such as 'äää' would be
         // considered since its length is six bytes, but only three characters
-        if content.len() < 5 {
+        if content.len()
+            < settings
+                .get("minimum_length")
+                .expect("failed to get minimum length setting")
+                .try_into()
+                .expect("failed to read minimum length setting as usize")
+        {
             debug!("Not matching a message of length {}", content.len());
             return false;
         }
@@ -68,7 +88,21 @@ impl Matcher for Crosspost {
             Entry::Occupied(mut entry) => {
                 let history = entry.get_mut();
 
-                if history.compare(msg, 80) {
+                if history.compare(
+                    msg,
+                    settings
+                        .get("threshold")
+                        .expect("failed to get threshold setting")
+                        .try_into()
+                        .expect("failed to read threshold setting as u16"),
+                    Duration::seconds(
+                        settings
+                            .get("timeout")
+                            .expect("failed to get timeout setting")
+                            .try_into()
+                            .expect("failed to read timeout setting as usize"),
+                    ),
+                ) {
                     return true;
                 } else {
                     history.push(msg);
@@ -95,18 +129,18 @@ impl History {
         self.history.push(info);
     }
 
-    fn compare(&self, msg: &Message, threshold: i16) -> bool {
+    fn compare(&self, msg: &Message, threshold: i16, timeout: Duration) -> bool {
         let hash = hash(&msg.content);
 
         for hist in self
             .history
             .iter()
-            .filter(|info| info.channel != msg.channel_id && (Utc::now() - info.timestamp) < Duration::seconds(3600))
+            .filter(|info| info.channel != msg.channel_id && (Utc::now() - info.timestamp) < timeout)
         {
             let comparison = nilsimsa::compare(&hash, &hist.hash);
             debug!("{} : {} -> {}", hash, hist.hash, comparison);
 
-            if comparison > threshold {
+            if comparison >= threshold {
                 return true;
             }
         }
