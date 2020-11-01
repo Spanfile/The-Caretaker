@@ -1,5 +1,6 @@
 use super::Matcher;
 use crate::{
+    error::InternalError,
     module::{cache::ModuleCache, settings::CrosspostSettings, ModuleKind},
     DbConnection,
 };
@@ -53,25 +54,24 @@ impl Matcher for Crosspost {
         )
     }
 
-    async fn is_match(&mut self, msg: &Message) -> bool {
+    async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool> {
         let userdata = self.userdata.read().await;
-        let module_cache = userdata.get::<ModuleCache>().expect("missing ModuleCache in userdata");
+        let module_cache = userdata
+            .get::<ModuleCache>()
+            .ok_or(InternalError::MissingUserdata("ModuleCache"))?;
         let db = userdata
             .get::<DbConnection>()
-            .expect("missing DbConnection in userdata")
+            .ok_or(InternalError::MissingUserdata("DbConnection"))?
             .lock()
             .await;
         let module = module_cache
             .get(
-                msg.guild_id.expect("missing guild ID in message"),
+                msg.guild_id
+                    .ok_or_else(|| InternalError::ImpossibleCase(String::from("no guild in message")))?,
                 ModuleKind::Crosspost,
             )
             .await;
-        let settings: CrosspostSettings = module
-            .get_settings(&db)
-            .expect("failed to get settings for module")
-            .try_into()
-            .unwrap();
+        let settings: CrosspostSettings = module.get_settings(&db)?.try_into()?;
 
         let content = &msg.content;
 
@@ -79,7 +79,7 @@ impl Matcher for Crosspost {
         // considered since its length is six bytes, but only three characters
         if content.len() < settings.minimum_length {
             debug!("Not matching a message of length {}", content.len());
-            return false;
+            return Ok(false);
         }
 
         match self.msg_history.entry((msg.guild_id.unwrap(), msg.author.id)) {
@@ -87,7 +87,7 @@ impl Matcher for Crosspost {
                 let history = entry.get_mut();
 
                 if history.compare(msg, settings.threshold, Duration::seconds(settings.timeout)) {
-                    return true;
+                    return Ok(true);
                 } else {
                     history.push(msg);
                 }
@@ -99,7 +99,7 @@ impl Matcher for Crosspost {
             }
         }
 
-        false
+        Ok(false)
     }
 }
 

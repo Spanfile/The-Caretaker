@@ -17,7 +17,7 @@ pub type MatcherResponse = (ModuleKind, Arc<Message>);
 #[async_trait]
 trait Matcher {
     async fn build(userdata: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self);
-    async fn is_match(&mut self, msg: &Message) -> bool;
+    async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool>;
 }
 
 // because the macro `matchers` always copies the action_tx, the original given action_tx isn't consumed, just cloned a
@@ -68,19 +68,26 @@ async fn run_matcher<M>(
         };
 
         let start = Instant::now();
-        let matched = matcher.is_match(&msg).await;
-        debug!("{}: returned match in {:?}", module, start.elapsed());
+        let result = matcher.is_match(&msg).await;
+        debug!("{}: returned match {:?} in {:?}", module, result, start.elapsed());
 
-        if matched {
-            debug!(
-                "{}: matched message {} in channel {} in guild {:?} by {}",
-                module, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
-            );
+        match result {
+            Ok(true) => {
+                debug!(
+                    "{}: matched message {} in channel {} in guild {:?} by {}",
+                    module, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
+                );
 
-            if tx.send((module, msg)).await.is_err() {
-                error!("{}: action channel closed", module);
-                return;
+                if tx.send((module, msg)).await.is_err() {
+                    error!("{}: action channel closed", module);
+                    return;
+                }
             }
-        }
+            Err(e) => {
+                error!("{}: matching failed: {:?}", module, e);
+                continue;
+            }
+            _ => (),
+        };
     }
 }
