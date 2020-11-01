@@ -1,7 +1,7 @@
 use super::Matcher;
 use crate::{
     error::InternalError,
-    module::{cache::ModuleCache, settings::CrosspostSettings, ModuleKind},
+    module::{settings::CrosspostSettings, Module, ModuleKind},
     DbConnection,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -54,22 +54,12 @@ impl Matcher for Crosspost {
         )
     }
 
-    async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool> {
+    async fn is_match(&mut self, module: Module, msg: &Message) -> anyhow::Result<bool> {
         let userdata = self.userdata.read().await;
-        let module_cache = userdata
-            .get::<ModuleCache>()
-            .ok_or(InternalError::MissingUserdata("ModuleCache"))?;
         let db = userdata
             .get::<DbConnection>()
             .ok_or(InternalError::MissingUserdata("DbConnection"))?
             .lock()
-            .await;
-        let module = module_cache
-            .get(
-                msg.guild_id
-                    .ok_or_else(|| InternalError::ImpossibleCase(String::from("no guild in message")))?,
-                ModuleKind::Crosspost,
-            )
             .await;
         let settings: CrosspostSettings = module.get_settings(&db)?.try_into()?;
 

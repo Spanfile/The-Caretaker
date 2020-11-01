@@ -322,32 +322,31 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 return;
             };
 
-            let guild_id = if let Some(id) = msg.guild_id {
-                id
-            } else {
-                warn!("Missing guild in action handler message (is the message a DM?)");
-                continue;
+            let guild_id = match msg.guild_id {
+                Some(id) => id,
+                None => {
+                    warn!("Missing guild in action handler message (is the message a DM?)");
+                    continue;
+                }
             };
 
             let module = module_cache.get(guild_id, kind).await;
-            if module.enabled() {
-                debug!(
-                    "Running actions for guild {} module {} message {}",
-                    guild_id, kind, msg.id
-                );
+            debug!(
+                "Running actions for guild {} module {} message {}",
+                guild_id, kind, msg.id
+            );
 
-                let db = db_arc.lock().await;
-                let actions = match module.get_actions(&db) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        error!("Failed to get module actions: {}", e);
-                        continue;
-                    }
-                };
-
-                for action in actions {
-                    spawn_action_runner(action, Arc::clone(&cache_http), Arc::clone(&msg));
+            let db = db_arc.lock().await;
+            let actions = match module.get_actions(&db) {
+                Ok(a) => a,
+                Err(e) => {
+                    error!("Failed to get module actions: {}", e);
+                    continue;
                 }
+            };
+
+            for action in actions {
+                spawn_action_runner(action, Arc::clone(&cache_http), Arc::clone(&msg));
             }
         }
     });

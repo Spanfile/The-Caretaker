@@ -1,7 +1,7 @@
 mod crosspost;
 mod mass_ping;
 
-use crate::module::ModuleKind;
+use crate::module::{cache::ModuleCache, Module, ModuleKind};
 use crosspost::Crosspost;
 use log::*;
 use mass_ping::MassPing;
@@ -17,7 +17,7 @@ pub type MatcherResponse = (ModuleKind, Arc<Message>);
 #[async_trait]
 trait Matcher {
     async fn build(userdata: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self);
-    async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool>;
+    async fn is_match(&mut self, module: Module, msg: &Message) -> anyhow::Result<bool>;
 }
 
 // because the macro `matchers` always copies the action_tx, the original given action_tx isn't consumed, just cloned a
@@ -52,39 +52,59 @@ async fn run_matcher<M>(
 ) where
     M: Matcher,
 {
-    let (module, mut matcher) = M::build(userdata).await;
+    let (kind, mut matcher) = M::build(Arc::clone(&userdata)).await;
 
     loop {
         let msg = match rx.recv().await {
             Ok(m) => m,
             Err(RecvError::Closed) => {
-                error!("{}: message channel closed", module);
+                error!("{}: message channel closed", kind);
                 return;
             }
             Err(RecvError::Lagged(skipped)) => {
-                warn!("{}: message rx lagged (skipped {} messages)", module, skipped);
+                warn!("{}: message rx lagged (skipped {} messages)", kind, skipped);
                 continue;
             }
         };
 
+        let guild_id = match msg.guild_id {
+            Some(id) => id,
+            None => {
+                warn!("{}: missing guild in message (is the message a DM?)", kind);
+                continue;
+            }
+        };
+
+        let module = userdata
+            .read()
+            .await
+            .get::<ModuleCache>()
+            .expect("missing ModuleCache in userdata")
+            .get(guild_id, kind)
+            .await;
+        if !module.enabled() {
+            debug!("{}: module disabled, not matching", kind);
+            continue;
+        }
+
         let start = Instant::now();
-        let result = matcher.is_match(&msg).await;
-        debug!("{}: returned match {:?} in {:?}", module, result, start.elapsed());
+        let result = matcher.is_match(module, &msg).await;
+        debug!("{}: returned match {:?} in {:?}", kind, result, start.elapsed());
 
         match result {
             Ok(true) => {
                 debug!(
                     "{}: matched message {} in channel {} in guild {:?} by {}",
-                    module, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
+                    kind, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
                 );
 
-                if tx.send((module, msg)).await.is_err() {
-                    error!("{}: action channel closed", module);
+                if tx.send((kind, msg)).await.is_err() {
+                    error!("{}: action channel closed", kind);
                     return;
                 }
             }
             Err(e) => {
-                error!("{}: matching failed: {:?}", module, e);
+                error!("{}: matching failed: {:?}", kind, e);
                 continue;
             }
             _ => (),
