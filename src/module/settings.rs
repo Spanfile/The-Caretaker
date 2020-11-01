@@ -33,15 +33,13 @@ impl ModuleSettings {
 
 macro_rules! create_empty_settings {
     ($($settings:ident),+) => {
-        $(
-            #[derive(Debug, Default)]
-            pub struct $settings {}
-            impl $settings {
-                fn from_db_rows(_: &[models::ModuleSetting]) -> anyhow::Result<Self> {
-                    Ok(Self {})
-                }
+        $(#[derive(Debug, Default)]
+        pub struct $settings {}
+        impl $settings {
+            fn from_db_rows(_: &[models::ModuleSetting]) -> anyhow::Result<Self> {
+                Ok(Self {})
             }
-        )+
+        })+
     };
 }
 
@@ -75,18 +73,16 @@ macro_rules! create_settings {
 
 macro_rules! setting_from_impls {
     ($($name:ident),+) => {
-        $(
-            impl TryFrom<ModuleSettings> for $name {
-                type Error = InternalError;
+        $(impl TryFrom<ModuleSettings> for $name {
+            type Error = InternalError;
 
-                fn try_from(settings: ModuleSettings) -> Result<Self, Self::Error> {
-                    match settings {
-                        ModuleSettings::$name(s) => Ok(s),
-                        _ => Err(InternalError::ImpossibleCase(format!("attempt to ")))
-                    }
+            fn try_from(settings: ModuleSettings) -> Result<Self, Self::Error> {
+                match settings {
+                    ModuleSettings::$name(s) => Ok(s),
+                    _ => Err(InternalError::ImpossibleCase(format!("attempt to read {:?} as {}", settings, stringify!($name))))
                 }
             }
-        )+
+        })+
     };
 }
 
