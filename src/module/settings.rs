@@ -2,6 +2,10 @@ use super::ModuleKind;
 use crate::{error::InternalError, models};
 use std::convert::TryFrom;
 
+pub trait Settings: Sized + TryFrom<ModuleSettings> {
+    fn from_db_rows(rows: &[models::ModuleSetting]) -> anyhow::Result<Self>;
+}
+
 #[derive(Debug)]
 pub enum ModuleSettings {
     MassPingSettings(MassPingSettings),
@@ -35,11 +39,12 @@ macro_rules! create_empty_settings {
     ($($settings:ident),+) => {
         $(#[derive(Debug, Default)]
         pub struct $settings {}
-        impl $settings {
+        impl Settings for $settings {
             fn from_db_rows(_: &[models::ModuleSetting]) -> anyhow::Result<Self> {
                 Ok(Self {})
             }
-        })+
+        }
+        try_from_impl!($settings);)+
     };
 }
 
@@ -56,7 +61,7 @@ macro_rules! create_settings {
             }
         }
 
-        impl $name {
+        impl Settings for $name {
             fn from_db_rows(rows: &[models::ModuleSetting]) -> anyhow::Result<Self> {
                 let mut new_self = Self::default();
                 for row in rows {
@@ -68,10 +73,12 @@ macro_rules! create_settings {
                 Ok(new_self)
             }
         }
+
+        try_from_impl!($name);
     };
 }
 
-macro_rules! setting_from_impls {
+macro_rules! try_from_impl {
     ($($name:ident),+) => {
         $(impl TryFrom<ModuleSettings> for $name {
             type Error = InternalError;
@@ -101,15 +108,4 @@ create_settings!(
     (minimum_length: usize => 5),
     (threshold: i16 => 80),
     (timeout: i64 => 3600)
-);
-
-setting_from_impls!(
-    MassPingSettings,
-    CrosspostSettings,
-    DynamicSlowmodeSettings,
-    UserSlowmodeSettings,
-    EmojiSpamSettings,
-    MentionSpamSettings,
-    SelfbotSettings,
-    InviteLinkSettings
 );

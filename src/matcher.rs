@@ -1,12 +1,23 @@
 mod crosspost;
 mod mass_ping;
 
-use crate::module::{cache::ModuleCache, Module, ModuleKind};
+use crate::{
+    module::{
+        cache::ModuleCache,
+        settings::{ModuleSettings, Settings},
+        ModuleKind,
+    },
+    DbConnection,
+};
 use crosspost::Crosspost;
 use log::*;
 use mass_ping::MassPing;
 use serenity::{async_trait, model::channel::Message, prelude::TypeMap};
-use std::{sync::Arc, time::Instant};
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+    time::Instant,
+};
 use tokio::sync::{
     broadcast::{self, RecvError},
     mpsc, RwLock,
@@ -16,8 +27,9 @@ pub type MatcherResponse = (ModuleKind, Arc<Message>);
 
 #[async_trait]
 trait Matcher {
+    type SettingsType: Settings;
     async fn build(userdata: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self);
-    async fn is_match(&mut self, module: Module, msg: &Message) -> anyhow::Result<bool>;
+    async fn is_match(&mut self, settings: Self::SettingsType, msg: &Message) -> anyhow::Result<bool>;
 }
 
 // because the macro `matchers` always copies the action_tx, the original given action_tx isn't consumed, just cloned a
@@ -51,6 +63,9 @@ async fn run_matcher<M>(
     userdata: Arc<RwLock<TypeMap>>,
 ) where
     M: Matcher,
+    // this bound specifies that the error type in the TryFrom impl for the given matcher type's associated
+    // SettingsType has to impl Debug
+    <<M as Matcher>::SettingsType as TryFrom<ModuleSettings>>::Error: std::fmt::Debug,
 {
     let (kind, mut matcher) = M::build(Arc::clone(&userdata)).await;
 
@@ -75,9 +90,8 @@ async fn run_matcher<M>(
             }
         };
 
-        let module = userdata
-            .read()
-            .await
+        let data = userdata.read().await;
+        let module = data
             .get::<ModuleCache>()
             .expect("missing ModuleCache in userdata")
             .get(guild_id, kind)
@@ -87,8 +101,20 @@ async fn run_matcher<M>(
             continue;
         }
 
+        let settings = {
+            let db = data
+                .get::<DbConnection>()
+                .expect("missing DbConnection in userdata")
+                .lock()
+                .await;
+            module
+                .get_settings(&db)
+                .expect("failed to get module settings")
+                .try_into()
+                .expect("failed to convert settings into required settings type")
+        };
         let start = Instant::now();
-        let result = matcher.is_match(module, &msg).await;
+        let result = matcher.is_match(settings, &msg).await;
         debug!("{}: returned match {:?} in {:?}", kind, result, start.elapsed());
 
         match result {

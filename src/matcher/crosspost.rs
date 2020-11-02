@@ -1,9 +1,5 @@
 use super::Matcher;
-use crate::{
-    error::InternalError,
-    module::{settings::CrosspostSettings, Module, ModuleKind},
-    DbConnection,
-};
+use crate::module::{settings::CrosspostSettings, ModuleKind};
 use chrono::{DateTime, Duration, Utc};
 use circular_queue::CircularQueue;
 use log::*;
@@ -18,7 +14,6 @@ use serenity::{
 };
 use std::{
     collections::{hash_map::Entry, HashMap},
-    convert::TryInto,
     sync::Arc,
 };
 use tokio::sync::RwLock;
@@ -27,7 +22,6 @@ const HISTORY_SIZE: usize = 3;
 
 pub struct Crosspost {
     msg_history: HashMap<(GuildId, UserId), History>,
-    userdata: Arc<RwLock<TypeMap>>,
 }
 
 #[derive(Debug)]
@@ -44,25 +38,18 @@ struct MessageInformation {
 
 #[async_trait]
 impl Matcher for Crosspost {
-    async fn build(userdata: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self) {
+    type SettingsType = CrosspostSettings;
+
+    async fn build(_: Arc<RwLock<TypeMap>>) -> (ModuleKind, Self) {
         (
             ModuleKind::Crosspost,
             Self {
                 msg_history: HashMap::new(),
-                userdata,
             },
         )
     }
 
-    async fn is_match(&mut self, module: Module, msg: &Message) -> anyhow::Result<bool> {
-        let userdata = self.userdata.read().await;
-        let db = userdata
-            .get::<DbConnection>()
-            .ok_or(InternalError::MissingUserdata("DbConnection"))?
-            .lock()
-            .await;
-        let settings: CrosspostSettings = module.get_settings(&db)?.try_into()?;
-
+    async fn is_match(&mut self, settings: Self::SettingsType, msg: &Message) -> anyhow::Result<bool> {
         let content = &msg.content;
 
         // .len() on a string returns its length in bytes, not in graphemes, so messages such as 'äää' would be
