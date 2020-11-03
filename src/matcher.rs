@@ -3,7 +3,7 @@ mod mass_ping;
 
 use crate::{
     error::InternalError,
-    ext::Userdata,
+    ext::UserdataExt,
     module::{
         cache::ModuleCache,
         settings::{ModuleSettings, Settings},

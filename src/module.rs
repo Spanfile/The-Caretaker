@@ -262,13 +262,13 @@ impl Module {
         let settings = settings.get_all();
         let rows = settings
             .iter()
-            .map(|(name, value)| models::NewModuleSetting {
+            .map(|(setting, value)| models::NewModuleSetting {
                 guild: self.guild.0 as i64,
                 module: self.kind,
-                setting: name,
-                value: &value,
+                setting,
+                value,
             })
-            .collect::<Vec<models::NewModuleSetting>>();
+            .collect::<Vec<_>>();
 
         let new_values = diesel::insert_into(module_settings::table)
             .values(&rows)

@@ -12,7 +12,7 @@ impl DurationExt for Duration {
     }
 }
 
-pub trait Userdata {
+pub trait UserdataExt {
     fn get_userdata<T>(&self) -> Result<&T::Value, InternalError>
     where
         T: TypeMapKey;
@@ -21,7 +21,7 @@ pub trait Userdata {
         T: TypeMapKey;
 }
 
-impl Userdata for TypeMap {
+impl UserdataExt for TypeMap {
     fn get_userdata<T>(&self) -> Result<&T::Value, InternalError>
     where
         T: TypeMapKey,

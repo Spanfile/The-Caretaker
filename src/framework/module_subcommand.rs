@@ -1,7 +1,7 @@
 use super::{enabled_string, react_success, NO_ACTIONS};
 use crate::{
     error::{ArgumentError, InternalError},
-    ext::Userdata,
+    ext::UserdataExt,
     module::{
         action::{Action, ActionKind},
         cache::ModuleCache,
@@ -157,26 +157,35 @@ impl ModuleSubcommand {
             }
             ModuleSubcommand::GetSettings => {
                 let settings = module.get_settings(&db)?;
+                let values = settings.get_all();
 
-                msg.channel_id
-                    .send_message(ctx, |m| {
-                        m.embed(|e| {
-                            e.title(format!("Settings for the `{}` module", module.kind()));
-                            e.fields(settings.get_all().into_iter().map(|(k, v)| {
-                                (
-                                    k,
-                                    format!(
-                                        "{}\nValue: `{}` (default: `{}`)",
-                                        settings.description_for(k).unwrap(),
-                                        v,
-                                        settings.default_for(k).unwrap(),
-                                    ),
-                                    false,
-                                )
-                            }))
+                if values.is_empty() {
+                    msg.channel_id
+                        .send_message(ctx, |m| {
+                            m.content(format!("The `{}` module has no applicable settings.", module.kind()))
                         })
-                    })
-                    .await?;
+                        .await?;
+                } else {
+                    msg.channel_id
+                        .send_message(ctx, |m| {
+                            m.embed(|e| {
+                                e.title(format!("Settings for the `{}` module", module.kind()));
+                                e.fields(values.into_iter().map(|(k, v)| {
+                                    (
+                                        k,
+                                        format!(
+                                            "{}\nValue: `{}` (default: `{}`)",
+                                            settings.description_for(k).unwrap(),
+                                            v,
+                                            settings.default_for(k).unwrap(),
+                                        ),
+                                        false,
+                                    )
+                                }))
+                            })
+                        })
+                        .await?;
+                }
             }
             ModuleSubcommand::SetSetting { name, value } => {
                 let mut settings = module.get_settings(&db)?;

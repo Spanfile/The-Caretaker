@@ -29,7 +29,7 @@ use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
 };
-use ext::Userdata;
+use ext::UserdataExt;
 use framework::CaretakerFramework;
 use log::*;
 use matcher::MatcherResponse;

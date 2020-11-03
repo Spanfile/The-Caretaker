@@ -1,7 +1,7 @@
 use super::{enabled_string, module_subcommand::ModuleSubcommand};
 use crate::{
     error::{ArgumentError, InternalError},
-    ext::{DurationExt, Userdata},
+    ext::{DurationExt, UserdataExt},
     module::{Module, ModuleKind},
     BotUptime, DbPool, ShardMetadata,
 };
