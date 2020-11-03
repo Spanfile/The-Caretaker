@@ -64,12 +64,11 @@ impl Module {
     pub fn get_all_modules(db: &PgConnection) -> anyhow::Result<Vec<Module>> {
         use schema::modules;
 
-        let mut modules = Vec::new();
-        for m in modules::table.load::<models::Module>(db)? {
-            modules.push(m.into());
-        }
-
-        Ok(modules)
+        Ok(modules::table
+            .load::<models::Module>(db)?
+            .into_iter()
+            .map(|m| m.into())
+            .collect())
     }
 
     pub fn get_all_modules_for_guild(guild: GuildId, db: &PgConnection) -> anyhow::Result<HashMap<ModuleKind, Module>> {
@@ -136,7 +135,7 @@ impl Module {
             .returning(modules::guild)
             .get_result::<i64>(db)?;
 
-        debug!("Insert {:#?}", enabled_setting);
+        debug!("{:?}: insert {:#?}", self, enabled_setting);
         Ok(())
     }
 
@@ -149,28 +148,26 @@ impl Module {
     pub fn get_actions(self, db: &PgConnection) -> anyhow::Result<Vec<Action<'static>>> {
         use schema::actions;
 
-        let mut actions = Vec::new();
-        for model in actions::table
+        let actions = actions::table
             .filter(
                 actions::guild
                     .eq(self.guild.0 as i64)
                     .and(actions::module.eq(self.kind)),
             )
             .load::<models::Action>(db)?
-        {
-            match model.action {
-                ActionKind::RemoveMessage => actions.push(Action::remove_message()),
-                ActionKind::Notify => actions.push(Action::notify(
-                    model.in_channel.map(|c| ChannelId(c as u64)),
-                    model
-                        .message
+            .into_iter()
+            .map::<Result<Action, InternalError>, _>(|m| match m.action {
+                ActionKind::RemoveMessage => Ok(Action::remove_message()),
+                ActionKind::Notify => Ok(Action::notify(
+                    m.in_channel.map(|c| ChannelId(c as u64)),
+                    m.message
                         .map(Cow::Owned)
                         .ok_or(InternalError::MissingField("message"))?,
                 )),
-            }
-        }
+            })
+            .collect::<Result<_, _>>()?;
 
-        debug!("{:#?}", actions);
+        debug!("{:?}: {:#?}", self, actions);
         Ok(actions)
     }
 
@@ -199,7 +196,7 @@ impl Module {
             .returning(actions::id)
             .get_result::<i32>(db)?;
 
-        debug!("Insert {:?} -> ID {}", action_model, id);
+        debug!("{:?}: insert {:?} -> ID {}", self, action_model, id);
         Ok(id)
     }
 
@@ -221,7 +218,7 @@ impl Module {
             .returning(actions::id)
             .get_result::<i32>(db)?;
 
-        debug!("Delete {:?}", delete);
+        debug!("{:?}: delete {:?}", self, delete);
         Ok(())
     }
 
@@ -238,7 +235,7 @@ impl Module {
             .select(count_star())
             .first(db)?;
 
-        debug!("# actions: {}", count);
+        debug!("{:?}: # actions: {}", self, count);
         Ok(count)
     }
 
@@ -254,7 +251,7 @@ impl Module {
             .load::<models::ModuleSetting>(db)?;
         let settings = ModuleSettings::from_db_rows(self.kind, &rows)?;
 
-        debug!("{:?}", settings);
+        debug!("{:?}: {:?}", self, settings);
         Ok(settings)
     }
 }
