@@ -13,7 +13,9 @@ pub trait FromDbRows: Sized {
 pub trait Settings {
     fn get_all(&self) -> Vec<(&'static str, String)>;
     fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError>;
+    fn default_for(&self, setting: &str) -> Result<&'static str, ArgumentError>;
     fn set(&mut self, setting: &str, value: &str) -> anyhow::Result<()>;
+    fn reset(&mut self, setting: &str) -> Result<(), ArgumentError>;
 }
 
 #[enum_dispatch(Settings)]
@@ -62,8 +64,14 @@ macro_rules! create_empty_settings {
             fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)))
             }
+            fn default_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
+                Err(ArgumentError::NoSuchSetting(String::from(setting)))
+            }
             fn set(&mut self, setting: &str, _: &str) -> anyhow::Result<()> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)).into())
+            }
+            fn reset(&mut self, setting: &str) -> Result<(), ArgumentError> {
+                Err(ArgumentError::NoSuchSetting(String::from(setting)))
             }
         })+
     };
@@ -102,15 +110,32 @@ macro_rules! create_settings {
 
             fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
                 match setting {
-                    $( stringify!($setting_name) => Ok($description), )+
+                    $(stringify!($setting_name) => Ok($description),)+
+                    _ => Err(ArgumentError::NoSuchSetting(String::from(setting)))
+                }
+            }
+
+            fn default_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
+                match setting {
+                    $(stringify!($setting_name) => Ok(stringify!($default)),)+
                     _ => Err(ArgumentError::NoSuchSetting(String::from(setting)))
                 }
             }
 
             fn set(&mut self, setting: &str, value: &str) -> anyhow::Result<()> {
                 match setting {
-                    $( stringify!($setting_name) => Ok(self.$setting_name = value.parse()?), )+
+                    $(stringify!($setting_name) => Ok(self.$setting_name = value.parse()?),)+
                     _ => Err(ArgumentError::NoSuchSetting(String::from(setting)).into()),
+                }
+            }
+
+            fn reset(&mut self, setting: &str) -> Result<(), ArgumentError> {
+                match setting {
+                    $(stringify!($setting_name) => {
+                        self.$setting_name = $default;
+                        Ok(())
+                    })+
+                    _ => Err(ArgumentError::NoSuchSetting(String::from(setting))),
                 }
             }
         }

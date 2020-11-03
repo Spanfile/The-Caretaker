@@ -113,6 +113,11 @@ enum ModuleSubcommand {
         /// The value of the setting
         value: String,
     },
+    /// Resets the value of a setting of the given module to its default value
+    ResetSetting {
+        /// The name of the setting
+        name: String,
+    },
 }
 
 pub struct CaretakerFramework {
@@ -373,7 +378,12 @@ impl ModuleSubcommand {
                             e.fields(settings.get_all().into_iter().map(|(k, v)| {
                                 (
                                     k,
-                                    format!("{}\nValue: `{}`", settings.description_for(k).unwrap(), v),
+                                    format!(
+                                        "{}\nValue: `{}` (default: `{}`)",
+                                        settings.description_for(k).unwrap(),
+                                        v,
+                                        settings.default_for(k).unwrap(),
+                                    ),
                                     false,
                                 )
                             }))
@@ -384,6 +394,12 @@ impl ModuleSubcommand {
             ModuleSubcommand::SetSetting { name, value } => {
                 let mut settings = module.get_settings(&db)?;
                 settings.set(&name, &value)?;
+                module.set_settings(&settings, &db)?;
+                react_success(ctx, &msg).await?;
+            }
+            ModuleSubcommand::ResetSetting { name } => {
+                let mut settings = module.get_settings(&db)?;
+                settings.reset(&name)?;
                 module.set_settings(&settings, &db)?;
                 react_success(ctx, &msg).await?;
             }
