@@ -27,7 +27,7 @@ use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
 };
-use error::InternalError;
+use ext::Userdata;
 use framework::CaretakerFramework;
 use log::*;
 use matcher::MatcherResponse;
@@ -310,14 +310,8 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
     debug!("Spawning action handler...");
 
     let data = client.data.read().await;
-    let module_cache = data
-        .get::<ModuleCache>()
-        .ok_or(InternalError::MissingUserdata("ModuleCache"))?
-        .clone();
-    let db_pool = data
-        .get::<DbPool>()
-        .ok_or(InternalError::MissingUserdata("DbPool"))?
-        .clone();
+    let module_cache = data.get_userdata::<ModuleCache>()?.clone();
+    let db_pool = data.get_userdata::<DbPool>()?.clone();
     let cache_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {

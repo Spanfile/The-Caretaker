@@ -2,7 +2,7 @@ mod crosspost;
 mod mass_ping;
 
 use crate::{
-    error::InternalError,
+    ext::Userdata,
     module::{
         cache::ModuleCache,
         settings::{ModuleSettings, Settings},
@@ -144,21 +144,14 @@ where
         };
 
         let data = self.userdata.read().await;
-        let module = data
-            .get::<ModuleCache>()
-            .ok_or(InternalError::MissingUserdata("ModuleCache"))?
-            .get(guild_id, self.kind)
-            .await;
+        let module = data.get_userdata::<ModuleCache>()?.get(guild_id, self.kind).await;
         if !module.enabled() {
             debug!("{}: module disabled, not matching", self.kind);
             return Ok(false);
         }
 
         let settings = {
-            let db = data
-                .get::<DbPool>()
-                .ok_or(InternalError::MissingUserdata("DbPool"))?
-                .get()?;
+            let db = data.get_userdata::<DbPool>()?.get()?;
             module.get_settings(&db)?.try_into()?
         };
 

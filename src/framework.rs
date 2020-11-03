@@ -1,6 +1,6 @@
 use crate::{
     error::{ArgumentError, InternalError},
-    ext::DurationExt,
+    ext::{DurationExt, Userdata},
     module::{
         action::{Action, ActionKind},
         cache::ModuleCache,
@@ -193,19 +193,13 @@ impl Command {
         match self {
             Command::Fail => return Err(InternalError::DeliberateError.into()),
             Command::Status => {
-                let shards = data
-                    .get::<ShardMetadata>()
-                    .ok_or(InternalError::MissingUserdata("ShardMetadata"))?;
+                let shards = data.get_userdata::<ShardMetadata>()?;
                 let own_shard = shards
                     .get(&ctx.shard_id)
                     .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
 
                 let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
-                let bot_uptime = data
-                    .get::<BotUptime>()
-                    .ok_or(InternalError::MissingUserdata("BotUptime"))?
-                    .elapsed()
-                    .round_to_seconds();
+                let bot_uptime = data.get_userdata::<BotUptime>()?.elapsed().round_to_seconds();
 
                 msg.channel_id
                     .send_message(&ctx, |m| {
@@ -231,22 +225,20 @@ impl Command {
             }
             Command::Module { module, subcommand } => {
                 let guild_id = msg.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
-                let db = data
-                    .get::<DbPool>()
-                    .ok_or(InternalError::MissingUserdata("DbPool"))?
-                    .get()?;
 
                 match (module, subcommand) {
                     (Some(module), subcommand) => {
-                        let module = Module::get_module_for_guild(guild_id, module, &db)?;
-                        // drop our lock to the db so the subcommand can retrieve its own lock to it when it needs.
-                        // do this instead of just passing the connection as a reference, since the *reference* cannot
-                        // be held between await points
-                        drop(db);
+                        let module = {
+                            let db = data.get_userdata::<DbPool>()?.get()?;
+                            Module::get_module_for_guild(guild_id, module, &db)?
+                        };
                         subcommand.run(module, ctx, msg).await?;
                     }
                     (None, ModuleSubcommand::GetEnabled) => {
-                        let modules = Module::get_all_modules_for_guild(guild_id, &db)?;
+                        let modules = {
+                            let db = data.get_userdata::<DbPool>()?.get()?;
+                            Module::get_all_modules_for_guild(guild_id, &db)?
+                        };
 
                         msg.channel_id
                             .send_message(&ctx, |m| {
@@ -279,13 +271,8 @@ impl Command {
 impl ModuleSubcommand {
     async fn run(self, mut module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
-        let db = data
-            .get::<DbPool>()
-            .ok_or(InternalError::MissingUserdata("DbPool"))?
-            .get()?;
-        let module_cache = data
-            .get::<ModuleCache>()
-            .ok_or(InternalError::MissingUserdata("ModuleCache"))?;
+        let db = data.get_userdata::<DbPool>()?.get()?;
+        let module_cache = data.get_userdata::<ModuleCache>()?;
 
         match self {
             ModuleSubcommand::SetEnabled { enabled } => {
