@@ -2,6 +2,7 @@ mod crosspost;
 mod mass_ping;
 
 use crate::{
+    error::InternalError,
     ext::Userdata,
     module::{
         cache::ModuleCache,
@@ -14,13 +15,7 @@ use crosspost::Crosspost;
 use log::*;
 use mass_ping::MassPing;
 use serenity::{async_trait, model::channel::Message, prelude::TypeMap};
-use std::{
-    convert::{TryFrom, TryInto},
-    error::Error,
-    fmt::Debug,
-    sync::Arc,
-    time::Instant,
-};
+use std::{convert::TryInto, sync::Arc, time::Instant};
 use tokio::sync::{
     broadcast::{self, RecvError},
     mpsc, RwLock,
@@ -64,9 +59,8 @@ async fn run_matcher<M>(
     userdata: Arc<RwLock<TypeMap>>,
 ) where
     M: Matcher,
-    // this bound specifies that the error type in the TryFrom impl for the given matcher type's associated
-    // SettingsType has to be 'static and impl Debug, Error, Send and Sync
-    <<M as Matcher>::SettingsType as TryFrom<ModuleSettings>>::Error: 'static + Debug + Error + Send + Sync,
+    ModuleSettings: TryInto<<M as Matcher>::SettingsType>,
+    <ModuleSettings as TryInto<<M as Matcher>::SettingsType>>::Error: 'static + Send + Sync,
 {
     let (kind, matcher) = M::build(Arc::clone(&userdata)).await;
     let runner = MatcherRunner {
@@ -94,7 +88,8 @@ struct MatcherRunner<M: Matcher> {
 impl<M> MatcherRunner<M>
 where
     M: Matcher,
-    <<M as Matcher>::SettingsType as TryFrom<ModuleSettings>>::Error: 'static + Debug + Error + Send + Sync,
+    ModuleSettings: TryInto<<M as Matcher>::SettingsType>,
+    <ModuleSettings as TryInto<<M as Matcher>::SettingsType>>::Error: 'static + Send + Sync,
 {
     async fn run(mut self) -> anyhow::Result<()> {
         loop {
@@ -152,7 +147,11 @@ where
 
         let settings = {
             let db = data.get_userdata::<DbPool>()?.get()?;
-            module.get_settings(&db)?.try_into()?
+            // the author of enum_dispatch is an idiot so their TryInto impl returns a 'static &str as an error, which
+            // is everything but (it doesn't impl Error)
+            module.get_settings(&db)?.try_into().map_err(|_| {
+                InternalError::ConversionFailed("tried to convert ModuleSettings variant to invalid type")
+            })?
         };
 
         self.matcher.is_match(settings, &msg).await

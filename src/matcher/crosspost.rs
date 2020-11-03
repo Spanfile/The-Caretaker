@@ -50,6 +50,7 @@ impl Matcher for Crosspost {
     }
 
     async fn is_match(&mut self, settings: Self::SettingsType, msg: &Message) -> anyhow::Result<bool> {
+        // TODO: ignore whitespace in content?
         let content = &msg.content;
 
         // .len() on a string returns its length in bytes, not in graphemes, so messages such as 'äää' would be
@@ -63,7 +64,7 @@ impl Matcher for Crosspost {
             Entry::Occupied(mut entry) => {
                 let history = entry.get_mut();
 
-                if history.compare(msg, settings.threshold, Duration::seconds(settings.timeout)) {
+                if history.compare(msg, settings.threshold, Duration::seconds(settings.timeout as i64)) {
                     return Ok(true);
                 } else {
                     history.push(msg);

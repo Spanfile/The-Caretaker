@@ -1,21 +1,32 @@
 use super::ModuleKind;
-use crate::{error::InternalError, models};
-use std::convert::TryFrom;
+use crate::{
+    error::{ArgumentError, InternalError},
+    models,
+};
+use enum_dispatch::enum_dispatch;
 
-pub trait Settings: Sized + TryFrom<ModuleSettings> {
+pub trait FromDbRows: Sized {
     fn from_db_rows(rows: &[models::ModuleSetting]) -> anyhow::Result<Self>;
 }
 
+#[enum_dispatch]
+pub trait Settings {
+    fn get_all(&self) -> Vec<(&'static str, String)>;
+    fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError>;
+    fn set(&mut self, setting: &str, value: &str) -> anyhow::Result<()>;
+}
+
+#[enum_dispatch(Settings)]
 #[derive(Debug)]
 pub enum ModuleSettings {
-    MassPingSettings(MassPingSettings),
-    CrosspostSettings(CrosspostSettings),
-    DynamicSlowmodeSettings(DynamicSlowmodeSettings),
-    UserSlowmodeSettings(UserSlowmodeSettings),
-    EmojiSpamSettings(EmojiSpamSettings),
-    MentionSpamSettings(MentionSpamSettings),
-    SelfbotSettings(SelfbotSettings),
-    InviteLinkSettings(InviteLinkSettings),
+    MassPingSettings,
+    CrosspostSettings,
+    DynamicSlowmodeSettings,
+    UserSlowmodeSettings,
+    EmojiSpamSettings,
+    MentionSpamSettings,
+    SelfbotSettings,
+    InviteLinkSettings,
 }
 
 impl ModuleSettings {
@@ -39,17 +50,27 @@ macro_rules! create_empty_settings {
     ($($settings:ident),+) => {
         $(#[derive(Debug, Default)]
         pub struct $settings {}
-        impl Settings for $settings {
+        impl FromDbRows for $settings {
             fn from_db_rows(_: &[models::ModuleSetting]) -> anyhow::Result<Self> {
                 Ok(Self {})
             }
         }
-        try_from_impl!($settings);)+
+        impl Settings for $settings {
+            fn get_all(&self) -> Vec<(&'static str, String)> {
+                vec![]
+            }
+            fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
+                Err(ArgumentError::NoSuchSetting(String::from(setting)))
+            }
+            fn set(&mut self, setting: &str, _: &str) -> anyhow::Result<()> {
+                Err(ArgumentError::NoSuchSetting(String::from(setting)).into())
+            }
+        })+
     };
 }
 
 macro_rules! create_settings {
-    ($name:ident, $(($setting_name:ident: $setting_type:ty => $default:expr)),+) => {
+    ($name:ident, $(($setting_name:ident: $setting_type:ty => $default:expr, $description:literal)),+) => {
         #[derive(Debug)]
         pub struct $name {
             $(pub $setting_name: $setting_type,)+
@@ -61,7 +82,7 @@ macro_rules! create_settings {
             }
         }
 
-        impl Settings for $name {
+        impl FromDbRows for $name {
             fn from_db_rows(rows: &[models::ModuleSetting]) -> anyhow::Result<Self> {
                 let mut new_self = Self::default();
                 for row in rows {
@@ -74,22 +95,25 @@ macro_rules! create_settings {
             }
         }
 
-        try_from_impl!($name);
-    };
-}
+        impl Settings for $name {
+            fn get_all(&self) -> Vec<(&'static str, String)> {
+                vec![$((stringify!($setting_name), self.$setting_name.to_string())),+]
+            }
 
-macro_rules! try_from_impl {
-    ($($name:ident),+) => {
-        $(impl TryFrom<ModuleSettings> for $name {
-            type Error = InternalError;
-
-            fn try_from(settings: ModuleSettings) -> Result<Self, Self::Error> {
-                match settings {
-                    ModuleSettings::$name(s) => Ok(s),
-                    _ => Err(InternalError::ImpossibleCase(format!("attempt to read {:?} as {}", settings, stringify!($name))))
+            fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
+                match setting {
+                    $( stringify!($setting_name) => Ok($description), )+
+                    _ => Err(ArgumentError::NoSuchSetting(String::from(setting)))
                 }
             }
-        })+
+
+            fn set(&mut self, setting: &str, value: &str) -> anyhow::Result<()> {
+                match setting {
+                    $( stringify!($setting_name) => Ok(self.$setting_name = value.parse()?), )+
+                    _ => Err(ArgumentError::NoSuchSetting(String::from(setting)).into()),
+                }
+            }
+        }
     };
 }
 
@@ -105,7 +129,7 @@ create_empty_settings!(
 
 create_settings!(
     CrosspostSettings,
-    (minimum_length: usize => 5),
-    (threshold: i16 => 80),
-    (timeout: i64 => 3600)
+    (minimum_length: usize => 5, "Ignore messages below this length"),
+    (threshold: i16 => 80, "The similarity threshold. Must be an integer between -128 and 128 where 128 means entirely similar, i.e. equal"),
+    (timeout: u32 => 3600, "Ignore older messages than this timeout. The value is in seconds")
 );

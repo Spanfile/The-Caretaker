@@ -15,9 +15,11 @@ pub enum InternalError {
     InvalidField(&'static str),
     #[error("Impossible case: {0}. This is a bug!")]
     ImpossibleCase(String),
+    #[error("Conversion failed: {0}")]
+    ConversionFailed(&'static str),
 }
 
-#[derive(Error, Debug, Copy, Clone)]
+#[derive(Error, Debug)]
 pub enum ArgumentError {
     #[error("The index {0} is out of range")]
     IndexOutOfRange(usize),
@@ -25,4 +27,6 @@ pub enum ArgumentError {
     NotSupportedInDM,
     #[error("The channel <#{0}> is not in this guild")]
     ChannelNotInGuild(ChannelId),
+    #[error("No such setting: {0}")]
+    NoSuchSetting(String),
 }

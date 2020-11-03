@@ -4,6 +4,7 @@ use crate::{
     module::{
         action::{Action, ActionKind},
         cache::ModuleCache,
+        settings::Settings,
         Module, ModuleKind,
     },
     BotUptime, DbPool, ShardMetadata,
@@ -54,6 +55,8 @@ enum Command {
                 ("subcommand", "get-actions"),
                 ("subcommand", "add-action"),
                 ("subcommand", "remove-action"),
+                ("subcommand", "get-settings"),
+                ("subcommand", "set-setting"),
             ])
         )]
         module: Option<ModuleKind>,
@@ -101,6 +104,15 @@ enum ModuleSubcommand {
         /// The index of the action to remove
         index: usize,
     },
+    /// Displays all settings and their values for the given module
+    GetSettings,
+    /// Sets the value of a setting of the given module
+    SetSetting {
+        /// The name of the setting
+        name: String,
+        /// The value of the setting
+        value: String,
+    },
 }
 
 pub struct CaretakerFramework {
@@ -132,7 +144,7 @@ impl Framework for CaretakerFramework {
                     if let Some(clap::Error { message, .. }) = e.downcast_ref() {
                         codeblock_message(message, m);
                     } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
-                        argument_error_message(*e, m);
+                        argument_error_message(e, m);
                     } else {
                         internal_error_message(e, m);
                     }
@@ -351,6 +363,30 @@ impl ModuleSubcommand {
                     react_success(ctx, &msg).await?;
                 }
             }
+            ModuleSubcommand::GetSettings => {
+                let settings = module.get_settings(&db)?;
+
+                msg.channel_id
+                    .send_message(ctx, |m| {
+                        m.embed(|e| {
+                            e.title(format!("Settings for the `{}` module", module.kind()));
+                            e.fields(settings.get_all().into_iter().map(|(k, v)| {
+                                (
+                                    k,
+                                    format!("{}\nValue: `{}`", settings.description_for(k).unwrap(), v),
+                                    false,
+                                )
+                            }))
+                        })
+                    })
+                    .await?;
+            }
+            ModuleSubcommand::SetSetting { name, value } => {
+                let mut settings = module.get_settings(&db)?;
+                settings.set(&name, &value)?;
+                module.set_settings(&settings, &db)?;
+                react_success(ctx, &msg).await?;
+            }
         }
 
         Ok(())
@@ -369,7 +405,7 @@ where
     });
 }
 
-fn argument_error_message(e: ArgumentError, m: &mut CreateMessage<'_>) {
+fn argument_error_message(e: &ArgumentError, m: &mut CreateMessage<'_>) {
     m.content(format!("{} {}", UNICODE_CROSS, e));
 }
 

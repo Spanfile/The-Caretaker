@@ -36,7 +36,7 @@ pub struct ModuleSetting {
     pub value: String,
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, AsChangeset, Debug)]
 #[table_name = "module_settings"]
 pub struct NewModuleSetting<'a> {
     pub guild: i64,

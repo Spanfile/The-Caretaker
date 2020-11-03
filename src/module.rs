@@ -7,7 +7,7 @@ pub mod dbimport {
 
 use self::{
     action::{Action, ActionKind},
-    settings::ModuleSettings,
+    settings::{ModuleSettings, Settings},
 };
 use crate::{
     error::{ArgumentError, InternalError},
@@ -253,5 +253,41 @@ impl Module {
 
         debug!("{:?}: {:?}", self, settings);
         Ok(settings)
+    }
+
+    pub fn set_settings(self, settings: &ModuleSettings, db: &DbConn) -> anyhow::Result<()> {
+        use diesel::pg::upsert::excluded;
+        use schema::module_settings;
+
+        let settings = settings.get_all();
+        let rows = settings
+            .iter()
+            .map(|(name, value)| models::NewModuleSetting {
+                guild: self.guild.0 as i64,
+                module: self.kind,
+                setting: name,
+                value: &value,
+            })
+            .collect::<Vec<models::NewModuleSetting>>();
+
+        let new_values = diesel::insert_into(module_settings::table)
+            .values(&rows)
+            .on_conflict((
+                module_settings::guild,
+                module_settings::module,
+                module_settings::setting,
+            ))
+            .do_update()
+            .set(module_settings::value.eq(excluded(module_settings::value)))
+            .returning((
+                module_settings::guild,
+                module_settings::module,
+                module_settings::setting,
+                module_settings::value,
+            ))
+            .get_results::<models::ModuleSetting>(db)?;
+
+        debug!("{:?}: insert {:?} -> {:?}", self, rows, new_values);
+        Ok(())
     }
 }
