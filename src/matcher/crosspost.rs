@@ -50,7 +50,6 @@ impl Matcher for Crosspost {
     }
 
     async fn is_match(&mut self, settings: Self::SettingsType, msg: &Message) -> anyhow::Result<bool> {
-        // TODO: ignore whitespace in content?
         let content = &msg.content;
 
         // .len() on a string returns its length in bytes, not in graphemes, so messages such as 'äää' would be
@@ -121,6 +120,8 @@ impl Default for History {
 
 fn hash(message: &str) -> String {
     let mut hasher = Nilsimsa::new();
-    hasher.update(message);
+    for word in message.split_whitespace() {
+        hasher.update(word);
+    }
     hasher.digest()
 }
