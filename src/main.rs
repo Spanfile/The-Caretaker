@@ -141,11 +141,6 @@ impl EventHandler for Handler {
             self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
         }
     }
-
-    async fn cache_ready(&self, _: Context, guilds: Vec<GuildId>) {
-        info!("Cache ready. {} guilds", guilds.len());
-        debug!("{:?}", guilds);
-    }
 }
 
 impl Handler {

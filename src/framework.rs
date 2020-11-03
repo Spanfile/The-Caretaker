@@ -51,6 +51,8 @@ impl Framework for CaretakerFramework {
         match self.process_message(&ctx, msg).await {
             Err(ProcessingError::MessageError(e)) => warn!("Message processing failed: {}", e),
             Err(ProcessingError::CommandError(e)) => {
+                error!("Command processing failed: {}", e);
+
                 if let Err(e) = channel_id
                     .send_message(&ctx, |m| {
                         if let Some(clap::Error { message, .. }) = e.downcast_ref() {
