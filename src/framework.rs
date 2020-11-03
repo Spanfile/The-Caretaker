@@ -124,6 +124,11 @@ pub struct CaretakerFramework {
     msg_tx: broadcast::Sender<Arc<Message>>,
 }
 
+enum ProcessingError {
+    CommandError(anyhow::Error),
+    MessageError(anyhow::Error),
+}
+
 #[async_trait]
 impl Framework for CaretakerFramework {
     async fn dispatch(&self, ctx: Context, msg: Message) {
@@ -132,7 +137,7 @@ impl Framework for CaretakerFramework {
             return;
         }
 
-        debug!("{:#?}", msg);
+        debug!("{:?}", msg);
         debug!(
             "Dispatch called {}ms later from message timestamp ({})",
             (Utc::now() - msg.timestamp).num_milliseconds(),
@@ -141,27 +146,28 @@ impl Framework for CaretakerFramework {
 
         let channel_id = msg.channel_id;
         let start = Instant::now();
-        if let Err(e) = self.process_message(&ctx, msg).await {
-            warn!("Message processing failed: {}", e);
-
-            if let Err(e) = channel_id
-                .send_message(&ctx, |m| {
-                    if let Some(clap::Error { message, .. }) = e.downcast_ref() {
-                        codeblock_message(message, m);
-                    } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
-                        argument_error_message(e, m);
-                    } else {
-                        internal_error_message(e, m);
-                    }
-                    m
-                })
-                .await
-            {
-                error!("Failed to send error message to channel {}: {}", channel_id, e);
+        match self.process_message(&ctx, msg).await {
+            Err(ProcessingError::MessageError(e)) => warn!("Message processing failed: {}", e),
+            Err(ProcessingError::CommandError(e)) => {
+                if let Err(e) = channel_id
+                    .send_message(&ctx, |m| {
+                        if let Some(clap::Error { message, .. }) = e.downcast_ref() {
+                            codeblock_message(message, m)
+                        } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
+                            argument_error_message(e, m)
+                        } else {
+                            internal_error_message(e, m)
+                        }
+                    })
+                    .await
+                {
+                    error!("Failed to send error message to channel {}: {}", channel_id, e);
+                }
             }
+            _ => {}
         }
 
-        debug!("Message processed succesfully. Processing took {:?}", start.elapsed());
+        debug!("Message processed in {:?}", start.elapsed());
     }
 }
 
@@ -170,11 +176,15 @@ impl CaretakerFramework {
         Self { msg_tx }
     }
 
-    async fn process_message(&self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    async fn process_message(&self, ctx: &Context, msg: Message) -> Result<(), ProcessingError> {
         if msg.content.starts_with(COMMAND_PREFIX) {
-            self.process_management_command(ctx, msg).await
+            self.process_management_command(ctx, msg)
+                .await
+                .map_err(ProcessingError::CommandError)
         } else {
-            self.process_user_message(ctx, msg).await
+            self.process_user_message(ctx, msg)
+                .await
+                .map_err(ProcessingError::MessageError)
         }
     }
 
@@ -409,7 +419,7 @@ impl ModuleSubcommand {
     }
 }
 
-fn internal_error_message<E>(err: E, m: &mut CreateMessage<'_>)
+fn internal_error_message<'a, 'b, E>(err: E, m: &'a mut CreateMessage<'b>) -> &'a mut CreateMessage<'b>
 where
     E: AsRef<dyn std::error::Error>,
 {
@@ -418,15 +428,15 @@ where
             .description(format!("```\n{}\n```", err.as_ref()))
             .timestamp(&Utc::now())
             .colour(Colour::RED)
-    });
+    })
 }
 
-fn argument_error_message(e: &ArgumentError, m: &mut CreateMessage<'_>) {
-    m.content(format!("{} {}", UNICODE_CROSS, e));
+fn argument_error_message<'a, 'b>(e: &ArgumentError, m: &'a mut CreateMessage<'b>) -> &'a mut CreateMessage<'b> {
+    m.content(format!("{} {}", UNICODE_CROSS, e))
 }
 
-fn codeblock_message(message: &str, m: &mut CreateMessage<'_>) {
-    m.content(format!("```\n{}\n```", message));
+fn codeblock_message<'a, 'b>(message: &str, m: &'a mut CreateMessage<'b>) -> &'a mut CreateMessage<'b> {
+    m.content(format!("```\n{}\n```", message))
 }
 
 async fn react_success(ctx: &Context, msg: &Message) -> anyhow::Result<()> {

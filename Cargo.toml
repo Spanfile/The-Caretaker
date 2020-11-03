@@ -14,7 +14,7 @@ diesel_migrations = "1.4.0"
 dotenv = "0.15.0"
 enum_dispatch = "0.3.4"
 envy = "0.4.1"
-fern = "0.6.0"
+fern = {version = "0.6.0", features = ["colored"]}
 humantime = "2.0.1"
 log = "0.4.11"
 nilsimsa = "0.2.0"

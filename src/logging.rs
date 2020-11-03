@@ -1,7 +1,12 @@
-use fern::Dispatch;
+use fern::{
+    colors::{Color, ColoredLevelConfig},
+    Dispatch,
+};
 use log::LevelFilter;
 use serde::Deserialize;
 use std::time::Instant;
+
+use crate::Config;
 
 #[derive(Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -31,8 +36,16 @@ impl From<LogLevel> for LevelFilter {
     }
 }
 
-pub fn setup_logging(log_level: LogLevel) -> anyhow::Result<()> {
+pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     let start = Instant::now();
+    let log_timestamps = config.log_timestamps;
+
+    let colors = ColoredLevelConfig::new()
+        .info(Color::Green)
+        .debug(Color::Magenta)
+        .warn(Color::Yellow)
+        .error(Color::Red);
+
     let mut dispatch = Dispatch::new()
         .format(move |out, msg, record| {
             let mut target = record.target().to_string();
@@ -42,20 +55,24 @@ pub fn setup_logging(log_level: LogLevel) -> anyhow::Result<()> {
                 target = format!("[{}] ", target);
             }
 
-            out.finish(format_args!(
-                "{: >11.3} {: >5} {}{}",
-                start.elapsed().as_secs_f32(),
-                record.level(),
-                target,
-                msg
-            ))
+            if log_timestamps {
+                out.finish(format_args!(
+                    "{: >11.3} {: >5} {}{}",
+                    start.elapsed().as_secs_f32(),
+                    colors.color(record.level()),
+                    target,
+                    msg
+                ))
+            } else {
+                out.finish(format_args!("{: >5} {}{}", record.level(), target, msg))
+            }
         })
-        .level(log_level.into())
+        .level(config.log_level.into())
         .level_for("tracing", LevelFilter::Warn)
         .level_for("async_tungstenite", LevelFilter::Debug)
         .chain(std::io::stdout());
 
-    if log_level != LogLevel::Trace {
+    if config.log_level != LogLevel::Trace {
         dispatch = dispatch
             .level_for("serenity", LevelFilter::Warn)
             .level_for("h2", LevelFilter::Warn)

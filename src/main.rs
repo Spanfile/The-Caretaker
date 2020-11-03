@@ -17,6 +17,8 @@ mod matcher;
 mod models;
 mod module;
 mod schema;
+// separate the embedded migrations into their own module just to the panic_in_result_fn clippy lint can be allowed in
+// the entire module
 mod migrations {
     #![allow(clippy::panic_in_result_fn)]
     pub use embedded_migrations::*;
@@ -51,11 +53,13 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Deserialize, Debug)]
 #[serde(default)]
-struct Config {
+pub struct Config {
     discord_token: String,
-    log_level: logging::LogLevel,
     latency_update_freq_ms: u64,
     database_url: String,
+    log_level: logging::LogLevel,
+    log_timestamps: bool,
+    log_colored: bool,
 }
 
 impl Default for Config {
@@ -66,6 +70,8 @@ impl Default for Config {
             database_url: String::default(),
             // serenity seems to update a shard's latency every 40 seconds so round it up to a nice one minute
             latency_update_freq_ms: 60_000,
+            log_timestamps: true,
+            log_colored: true,
         }
     }
 }
@@ -187,7 +193,7 @@ impl Handler {
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
     let config = envy::from_env::<Config>()?;
-    logging::setup_logging(config.log_level)?;
+    logging::setup_logging(&config)?;
 
     info!("Starting...");
     debug!("{:#?}", config);
