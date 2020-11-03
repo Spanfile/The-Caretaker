@@ -130,12 +130,11 @@ where
     }
 
     async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool> {
-        let guild_id = match msg.guild_id {
-            Some(id) => id,
-            None => {
-                warn!("{}: missing guild in message (is the message a DM?)", self.kind);
-                return Ok(false);
-            }
+        let guild_id = if let Some(id) = msg.guild_id {
+            id
+        } else {
+            warn!("{}: missing guild in message (is the message a DM?)", self.kind);
+            return Ok(false);
         };
 
         let data = self.userdata.read().await;

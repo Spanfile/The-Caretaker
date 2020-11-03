@@ -6,7 +6,12 @@ use crate::error::{ArgumentError, InternalError};
 use chrono::Utc;
 use log::*;
 use serenity::{
-    async_trait, builder::CreateMessage, client::Context, framework::Framework, model::channel::Message, utils::Colour,
+    async_trait,
+    builder::{CreateEmbed, CreateMessage},
+    client::Context,
+    framework::Framework,
+    model::channel::Message,
+    utils::Colour,
 };
 use std::{sync::Arc, time::Instant};
 use structopt::{clap, StructOpt};
@@ -132,6 +137,22 @@ fn codeblock_message<'a, 'b>(message: &str, m: &'a mut CreateMessage<'b>) -> &'a
 
 async fn react_success(ctx: &Context, msg: &Message) -> anyhow::Result<()> {
     msg.react(ctx, UNICODE_CHECK).await?;
+    Ok(())
+}
+
+async fn respond<'a, F>(ctx: &Context, msg: &Message, f: F) -> anyhow::Result<()>
+where
+    for<'b> F: FnOnce(&'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a>,
+{
+    msg.channel_id.send_message(ctx, f).await?;
+    Ok(())
+}
+
+async fn respond_embed<F>(ctx: &Context, msg: &Message, f: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
+{
+    msg.channel_id.send_message(ctx, |m| m.embed(f)).await?;
     Ok(())
 }
 

@@ -2,6 +2,8 @@
 #![warn(clippy::needless_pass_by_value)]
 #![warn(clippy::non_ascii_literal)]
 #![warn(clippy::panic_in_result_fn)]
+#![warn(clippy::clippy::too_many_lines)]
+#![warn(clippy::clippy::single_match_else)]
 
 // ew what is this, rust 2015?
 #[macro_use]
@@ -330,12 +332,11 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 return;
             };
 
-            let guild_id = match msg.guild_id {
-                Some(id) => id,
-                None => {
-                    warn!("Missing guild in action handler message (is the message a DM?)");
-                    continue;
-                }
+            let guild_id = if let Some(id) = msg.guild_id {
+                id
+            } else {
+                warn!("Missing guild in action handler message (is the message a DM?)");
+                continue;
             };
 
             let module = module_cache.get(guild_id, kind).await;

@@ -1,4 +1,4 @@
-use super::{enabled_string, module_subcommand::ModuleSubcommand};
+use super::{enabled_string, module_subcommand::ModuleSubcommand, respond_embed};
 use crate::{
     error::{ArgumentError, InternalError},
     ext::{DurationExt, UserdataExt},
@@ -48,82 +48,77 @@ pub enum Command {
 
 impl Command {
     pub async fn run(self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
-        let data = ctx.data.read().await;
-
         match self {
-            Command::Fail => return Err(InternalError::DeliberateError.into()),
-            Command::Status => {
-                let shards = data.get_userdata::<ShardMetadata>()?;
-                let own_shard = shards
-                    .get(&ctx.shard_id)
-                    .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
+            Command::Fail => Err(InternalError::DeliberateError.into()),
+            Command::Status => status_command(ctx, msg).await,
+            Command::Module { module, subcommand } => module_command(module, subcommand, ctx, msg).await,
+        }
+    }
+}
 
-                let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
-                let bot_uptime = data.get_userdata::<BotUptime>()?.elapsed().round_to_seconds();
+async fn status_command(ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let shards = data.get_userdata::<ShardMetadata>()?;
+    let own_shard = shards
+        .get(&ctx.shard_id)
+        .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
 
-                msg.channel_id
-                    .send_message(&ctx, |m| {
-                        m.embed(|e| {
-                            e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
-                            e.field("Guilds", format!("{}", own_shard.guilds), true);
-                            e.field("Bot uptime", format!("{}", format_duration(bot_uptime)), true);
-                            e.field("Shard uptime", format!("{}", format_duration(own_uptime)), true);
+    let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
+    let bot_uptime = data.get_userdata::<BotUptime>()?.elapsed().round_to_seconds();
 
-                            if let Some(latency) = own_shard.latency {
-                                e.field("GW latency", format!("{:?}", latency), true);
-                            } else {
-                                e.field("GW latency", "n/a", true);
-                            }
+    respond_embed(ctx, &msg, |e| {
+        e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
+        e.field("Guilds", format!("{}", own_shard.guilds), true);
+        e.field("Bot uptime", format!("{}", format_duration(bot_uptime)), true);
+        e.field("Shard uptime", format!("{}", format_duration(own_uptime)), true);
 
-                            // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
-                            // which will construct the timestamp string out of it.`, but serenity itself implements the
-                            // conversion only for references to datetimes, not datetimes directly
-                            e.timestamp(&Utc::now())
-                        })
-                    })
-                    .await?;
-            }
-            Command::Module { module, subcommand } => {
-                let guild_id = msg.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
+        if let Some(latency) = own_shard.latency {
+            e.field("GW latency", format!("{:?}", latency), true);
+        } else {
+            e.field("GW latency", "n/a", true);
+        }
 
-                match (module, subcommand) {
-                    (Some(module), subcommand) => {
-                        let module = {
-                            let db = data.get_userdata::<DbPool>()?.get()?;
-                            Module::get_module_for_guild(guild_id, module, &db)?
-                        };
-                        subcommand.run(module, ctx, msg).await?;
-                    }
-                    (None, ModuleSubcommand::GetEnabled) => {
-                        let modules = {
-                            let db = data.get_userdata::<DbPool>()?.get()?;
-                            Module::get_all_modules_for_guild(guild_id, &db)?
-                        };
+        // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
+        // which will construct the timestamp string out of it.`, but serenity itself implements the
+        // conversion only for references to datetimes, not datetimes directly
+        e.timestamp(&Utc::now())
+    })
+    .await
+}
 
-                        msg.channel_id
-                            .send_message(&ctx, |m| {
-                                m.embed(|e| {
-                                    e.title("Status of all modules");
+async fn module_command(
+    module: Option<ModuleKind>,
+    subcommand: ModuleSubcommand,
+    ctx: &Context,
+    msg: Message,
+) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let guild_id = msg.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
 
-                                    for (kind, module) in modules {
-                                        e.field(kind, enabled_string(module.enabled()), true);
-                                    }
-                                    e
-                                })
-                            })
-                            .await?;
-                    }
-                    (m, s) => {
-                        return Err(InternalError::ImpossibleCase(format!(
-                            "module is {:?} and subcommand is {:?}",
-                            m, s
-                        ))
-                        .into())
-                    }
-                };
-            }
-        };
+    match (module, subcommand) {
+        (Some(module), subcommand) => {
+            let module = {
+                let db = data.get_userdata::<DbPool>()?.get()?;
+                Module::get_module_for_guild(guild_id, module, &db)?
+            };
+            subcommand.run(module, ctx, msg).await
+        }
+        (None, ModuleSubcommand::GetEnabled) => {
+            let modules = {
+                let db = data.get_userdata::<DbPool>()?.get()?;
+                Module::get_all_modules_for_guild(guild_id, &db)?
+            };
 
-        Ok(())
+            respond_embed(ctx, &msg, |e| {
+                e.title("Status of all modules");
+
+                for (kind, module) in modules {
+                    e.field(kind, enabled_string(module.enabled()), true);
+                }
+                e
+            })
+            .await
+        }
+        (m, s) => Err(InternalError::ImpossibleCase(format!("module is {:?} and subcommand is {:?}", m, s)).into()),
     }
 }

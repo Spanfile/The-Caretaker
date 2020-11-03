@@ -1,4 +1,4 @@
-use super::{enabled_string, react_success, NO_ACTIONS};
+use super::{enabled_string, react_success, respond, respond_embed, NO_ACTIONS};
 use crate::{
     error::{ArgumentError, InternalError},
     ext::UserdataExt,
@@ -73,134 +73,160 @@ pub enum ModuleSubcommand {
 }
 
 impl ModuleSubcommand {
-    pub async fn run(self, mut module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
-        let data = ctx.data.read().await;
-        let db = data.get_userdata::<DbPool>()?.get()?;
-        let module_cache = data.get_userdata::<ModuleCache>()?;
-
+    pub async fn run(self, module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         match self {
-            ModuleSubcommand::SetEnabled { enabled } => {
-                module.set_enabled(enabled, &db)?;
-                module_cache.update(module).await?;
-
-                react_success(ctx, &msg).await?;
-            }
-            ModuleSubcommand::GetEnabled => {
-                msg.channel_id
-                    .send_message(ctx, |m| {
-                        m.content(format!(
-                            "The `{}` module is: {}",
-                            module.kind(),
-                            enabled_string(module.enabled())
-                        ))
-                    })
-                    .await?;
-            }
-            ModuleSubcommand::GetActions => {
-                let actions = module.get_actions(&db)?;
-                msg.channel_id
-                    .send_message(ctx, |m| {
-                        if actions.is_empty() {
-                            m.content(NO_ACTIONS)
-                        } else {
-                            m.embed(|e| {
-                                e.title(format!("Actions for the `{}` module", module.kind()));
-
-                                for (idx, action) in actions.into_iter().enumerate() {
-                                    let name = format!("{}: {}", idx, action.friendly_name());
-                                    e.field(name, action.description(), false);
-                                }
-
-                                e
-                            })
-                        }
-                    })
-                    .await?;
-            }
+            ModuleSubcommand::SetEnabled { enabled } => set_enabled(enabled, module, ctx, msg).await,
+            ModuleSubcommand::GetEnabled => get_enabled(module, ctx, msg).await,
+            ModuleSubcommand::GetActions => get_actions(module, ctx, msg).await,
             ModuleSubcommand::AddAction {
                 action,
                 in_channel,
                 message,
-            } => {
-                let action = match action {
-                    ActionKind::Notify => {
-                        if let Some(in_channel) = in_channel {
-                            let channels = module.guild().channels(ctx).await?;
-                            if !channels.contains_key(&in_channel) {
-                                return Err(ArgumentError::ChannelNotInGuild(in_channel).into());
-                            }
-                        }
-
-                        Action::notify(
-                            in_channel,
-                            message.as_deref().map(Cow::Borrowed).ok_or_else(|| {
-                                InternalError::ImpossibleCase(format!(
-                                    "message is {:?} while ActionKind is {}",
-                                    message, action
-                                ))
-                            })?,
-                        )
-                    }
-                    ActionKind::RemoveMessage => Action::remove_message(),
-                };
-
-                module.add_action(&action, &db)?;
-                react_success(ctx, &msg).await?;
-            }
-            ModuleSubcommand::RemoveAction { index } => {
-                if module.action_count(&db)? == 0 {
-                    msg.channel_id.send_message(ctx, |m| m.content(NO_ACTIONS)).await?;
-                } else {
-                    module.remove_nth_action(index, &db)?;
-                    react_success(ctx, &msg).await?;
-                }
-            }
-            ModuleSubcommand::GetSettings => {
-                let settings = module.get_settings(&db)?;
-                let values = settings.get_all();
-
-                if values.is_empty() {
-                    msg.channel_id
-                        .send_message(ctx, |m| {
-                            m.content(format!("The `{}` module has no applicable settings.", module.kind()))
-                        })
-                        .await?;
-                } else {
-                    msg.channel_id
-                        .send_message(ctx, |m| {
-                            m.embed(|e| {
-                                e.title(format!("Settings for the `{}` module", module.kind()));
-                                e.fields(values.into_iter().map(|(k, v)| {
-                                    (
-                                        k,
-                                        format!(
-                                            "{}\nValue: `{}` (default: `{}`)",
-                                            settings.description_for(k).unwrap(),
-                                            v,
-                                            settings.default_for(k).unwrap(),
-                                        ),
-                                        false,
-                                    )
-                                }))
-                            })
-                        })
-                        .await?;
-                }
-            }
-            ModuleSubcommand::SetSetting { name, value } => {
-                let mut settings = module.get_settings(&db)?;
-                settings.set(&name, &value)?;
-                module.set_settings(&settings, &db)?;
-                react_success(ctx, &msg).await?;
-            }
-            ModuleSubcommand::ResetSetting { name } => {
-                let mut settings = module.get_settings(&db)?;
-                settings.reset(&name)?;
-                module.set_settings(&settings, &db)?;
-                react_success(ctx, &msg).await?;
-            }
+            } => add_action(action, in_channel, message, module, ctx, msg).await,
+            ModuleSubcommand::RemoveAction { index } => remove_action(index, module, ctx, msg).await,
+            ModuleSubcommand::GetSettings => get_settings(module, ctx, msg).await,
+            ModuleSubcommand::SetSetting { name, value } => set_setting(&name, &value, module, ctx, msg).await,
+            ModuleSubcommand::ResetSetting { name } => reset_setting(&name, module, ctx, msg).await,
         }
-
-        Ok(())
     }
+}
+
+async fn set_enabled(enabled: bool, mut module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let module_cache = data.get_userdata::<ModuleCache>()?;
+
+    module.set_enabled(enabled, &db)?;
+    module_cache.update(module).await?;
+
+    react_success(ctx, &msg).await
+}
+
+async fn get_enabled(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    respond(ctx, &msg, |m| {
+        m.content(format!(
+            "The `{}` module is: {}",
+            module.kind(),
+            enabled_string(module.enabled())
+        ))
+    })
+    .await
+}
+
+async fn get_actions(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let actions = module.get_actions(&db)?;
+
+    if actions.is_empty() {
+        respond(ctx, &msg, |m| m.content(NO_ACTIONS)).await
+    } else {
+        respond_embed(ctx, &msg, |e| {
+            e.title(format!("Actions for the `{}` module", module.kind()));
+
+            for (idx, action) in actions.into_iter().enumerate() {
+                let name = format!("{}: {}", idx, action.friendly_name());
+                e.field(name, action.description(), false);
+            }
+
+            e
+        })
+        .await
+    }
+}
+
+async fn add_action(
+    action: ActionKind,
+    in_channel: Option<ChannelId>,
+    message: Option<String>,
+    module: Module,
+    ctx: &Context,
+    msg: Message,
+) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let action = match action {
+        ActionKind::Notify => {
+            if let Some(in_channel) = in_channel {
+                let channels = module.guild().channels(ctx).await?;
+                if !channels.contains_key(&in_channel) {
+                    return Err(ArgumentError::ChannelNotInGuild(in_channel).into());
+                }
+            }
+
+            Action::notify(
+                in_channel,
+                message.as_deref().map(Cow::Borrowed).ok_or_else(|| {
+                    InternalError::ImpossibleCase(format!("message is {:?} while ActionKind is {}", message, action))
+                })?,
+            )
+        }
+        ActionKind::RemoveMessage => Action::remove_message(),
+    };
+
+    module.add_action(&action, &db)?;
+    react_success(ctx, &msg).await
+}
+
+async fn remove_action(index: usize, module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+
+    if module.action_count(&db)? == 0 {
+        respond(ctx, &msg, |m| m.content(NO_ACTIONS)).await
+    } else {
+        module.remove_nth_action(index, &db)?;
+        react_success(ctx, &msg).await
+    }
+}
+
+async fn get_settings(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let settings = module.get_settings(&db)?;
+    let values = settings.get_all();
+
+    if values.is_empty() {
+        respond(ctx, &msg, |m| {
+            m.content(format!("The `{}` module has no applicable settings.", module.kind()))
+        })
+        .await
+    } else {
+        respond_embed(ctx, &msg, |e| {
+            e.title(format!("Settings for the `{}` module", module.kind()));
+            e.fields(values.into_iter().map(|(k, v)| {
+                (
+                    k, // field name
+                    format!(
+                        "{}\nValue: `{}` (default: `{}`)",
+                        settings.description_for(k).unwrap(),
+                        v,
+                        settings.default_for(k).unwrap(),
+                    ), // field value
+                    false, // inline
+                )
+            }))
+        })
+        .await
+    }
+}
+
+async fn set_setting(name: &str, value: &str, module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let mut settings = module.get_settings(&db)?;
+
+    settings.set(&name, &value)?;
+    module.set_settings(&settings, &db)?;
+    react_success(ctx, &msg).await
+}
+
+async fn reset_setting(name: &str, module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let mut settings = module.get_settings(&db)?;
+
+    settings.reset(&name)?;
+    module.set_settings(&settings, &db)?;
+    react_success(ctx, &msg).await
 }
