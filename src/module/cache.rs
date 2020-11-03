@@ -1,5 +1,6 @@
+use crate::DbConn;
+
 use super::{Module, ModuleKind};
-use diesel::PgConnection;
 use log::*;
 use serenity::{model::id::GuildId, prelude::TypeMapKey};
 use std::{
@@ -18,7 +19,7 @@ impl TypeMapKey for ModuleCache {
 }
 
 impl ModuleCache {
-    pub fn populate_from_db(db: &PgConnection) -> anyhow::Result<Self> {
+    pub fn populate_from_db(db: &DbConn) -> anyhow::Result<Self> {
         let all_modules = Module::get_all_modules(db)?;
         let module_count = all_modules.len();
         let mut guilds: HashMap<GuildId, HashMap<ModuleKind, Module>> = HashMap::new();

@@ -11,9 +11,9 @@ use self::{
 };
 use crate::{
     error::{ArgumentError, InternalError},
-    models, schema,
+    models, schema, DbConn,
 };
-use diesel::{prelude::*, PgConnection};
+use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use log::*;
 use serenity::model::id::{ChannelId, GuildId};
@@ -61,7 +61,7 @@ impl Module {
         }
     }
 
-    pub fn get_all_modules(db: &PgConnection) -> anyhow::Result<Vec<Module>> {
+    pub fn get_all_modules(db: &DbConn) -> anyhow::Result<Vec<Module>> {
         use schema::modules;
 
         Ok(modules::table
@@ -71,7 +71,7 @@ impl Module {
             .collect())
     }
 
-    pub fn get_all_modules_for_guild(guild: GuildId, db: &PgConnection) -> anyhow::Result<HashMap<ModuleKind, Module>> {
+    pub fn get_all_modules_for_guild(guild: GuildId, db: &DbConn) -> anyhow::Result<HashMap<ModuleKind, Module>> {
         use schema::modules;
 
         let mut modules = HashMap::new();
@@ -90,7 +90,7 @@ impl Module {
         Ok(modules)
     }
 
-    pub fn get_module_for_guild(guild: GuildId, kind: ModuleKind, db: &PgConnection) -> anyhow::Result<Module> {
+    pub fn get_module_for_guild(guild: GuildId, kind: ModuleKind, db: &DbConn) -> anyhow::Result<Module> {
         use schema::modules;
 
         let module = modules::table
@@ -115,7 +115,7 @@ impl Module {
         self.enabled
     }
 
-    pub fn set_enabled(&mut self, enabled: bool, db: &PgConnection) -> anyhow::Result<()> {
+    pub fn set_enabled(&mut self, enabled: bool, db: &DbConn) -> anyhow::Result<()> {
         use schema::modules;
 
         self.enabled = enabled;
@@ -145,7 +145,7 @@ impl Module {
     // the returning action, it is "locked" to always containing only owned data (or the borrowed data would have to
     // be 'static as well). this function returns only new action objects that contain only owned data, so the
     // lifetime is valid
-    pub fn get_actions(self, db: &PgConnection) -> anyhow::Result<Vec<Action<'static>>> {
+    pub fn get_actions(self, db: &DbConn) -> anyhow::Result<Vec<Action<'static>>> {
         use schema::actions;
 
         let actions = actions::table
@@ -171,7 +171,7 @@ impl Module {
         Ok(actions)
     }
 
-    pub fn add_action(self, action: &Action, db: &PgConnection) -> anyhow::Result<i32> {
+    pub fn add_action(self, action: &Action, db: &DbConn) -> anyhow::Result<i32> {
         use schema::actions;
 
         let action_model = match action.kind {
@@ -200,7 +200,7 @@ impl Module {
         Ok(id)
     }
 
-    pub fn remove_nth_action(self, n: usize, db: &PgConnection) -> anyhow::Result<()> {
+    pub fn remove_nth_action(self, n: usize, db: &DbConn) -> anyhow::Result<()> {
         use schema::actions;
 
         let actions = actions::table
@@ -222,7 +222,7 @@ impl Module {
         Ok(())
     }
 
-    pub fn action_count(self, db: &PgConnection) -> anyhow::Result<i64> {
+    pub fn action_count(self, db: &DbConn) -> anyhow::Result<i64> {
         use diesel::dsl::*;
         use schema::actions;
 
@@ -239,7 +239,7 @@ impl Module {
         Ok(count)
     }
 
-    pub fn get_settings(self, db: &PgConnection) -> anyhow::Result<ModuleSettings> {
+    pub fn get_settings(self, db: &DbConn) -> anyhow::Result<ModuleSettings> {
         use schema::module_settings;
 
         let rows = module_settings::table

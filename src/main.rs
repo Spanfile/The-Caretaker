@@ -23,7 +23,10 @@ mod migrations {
     embed_migrations!();
 }
 
-use diesel::{pg::PgConnection, prelude::*};
+use diesel::{
+    pg::PgConnection,
+    r2d2::{ConnectionManager, Pool, PooledConnection},
+};
 use error::InternalError;
 use framework::CaretakerFramework;
 use log::*;
@@ -79,9 +82,10 @@ impl TypeMapKey for ShardMetadata {
     type Value = HashMap<u64, ShardMetadata>;
 }
 
-struct DbConnection {}
-impl TypeMapKey for DbConnection {
-    type Value = Arc<Mutex<PgConnection>>;
+type DbConn = PooledConnection<ConnectionManager<PgConnection>>;
+struct DbPool {}
+impl TypeMapKey for DbPool {
+    type Value = Pool<ConnectionManager<PgConnection>>;
 }
 
 struct BotUptime {}
@@ -188,14 +192,14 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting...");
     debug!("{:#?}", config);
 
-    let db_conn = establish_database_connection(&config.database_url)?;
-    let module_cache = ModuleCache::populate_from_db(&db_conn)?;
+    let db_pool = build_db_pool(&config.database_url)?;
+    let module_cache = ModuleCache::populate_from_db(&db_pool.get()?)?;
 
     let (msg_tx, _) = broadcast::channel(64);
     let (action_tx, action_rx) = mpsc::channel(8);
 
     let mut client = create_discord_client(&config.discord_token, msg_tx.clone()).await?;
-    populate_userdata(&client, module_cache, db_conn).await?;
+    populate_userdata(&client, module_cache, db_pool).await?;
 
     matcher::spawn_message_matchers(msg_tx, action_tx, client.data.clone());
     spawn_action_handler(&client, action_rx).await?;
@@ -211,12 +215,12 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn establish_database_connection(url: &str) -> anyhow::Result<PgConnection> {
-    debug!("Establishing database connection to {}...", url);
+fn build_db_pool(url: &str) -> anyhow::Result<Pool<ConnectionManager<PgConnection>>> {
+    debug!("Establishing pooled database connection to {}...", url);
 
-    let db_conn = PgConnection::establish(url)?;
-    migrations::run(&db_conn)?;
-    Ok(db_conn)
+    let builder = Pool::builder();
+    debug!("{:#?}", builder);
+    Ok(builder.build(ConnectionManager::new(url))?)
 }
 
 async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Message>>) -> anyhow::Result<Client> {
@@ -236,13 +240,17 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     Ok(client)
 }
 
-async fn populate_userdata(client: &Client, module_cache: ModuleCache, db: PgConnection) -> anyhow::Result<()> {
+async fn populate_userdata(
+    client: &Client,
+    module_cache: ModuleCache,
+    db_pool: Pool<ConnectionManager<PgConnection>>,
+) -> anyhow::Result<()> {
     debug!("Populating userdata...");
     let mut data = client.data.write().await;
 
     data.insert::<ModuleCache>(module_cache);
     data.insert::<ShardMetadata>(HashMap::default());
-    data.insert::<DbConnection>(Arc::new(Mutex::new(db)));
+    data.insert::<DbPool>(db_pool);
     data.insert::<BotUptime>(Instant::now());
 
     Ok(())
@@ -306,10 +314,10 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
         .get::<ModuleCache>()
         .ok_or(InternalError::MissingUserdata("ModuleCache"))?
         .clone();
-    let db_arc = Arc::clone(
-        data.get::<DbConnection>()
-            .ok_or(InternalError::MissingUserdata("DbConnection"))?,
-    );
+    let db_pool = data
+        .get::<DbPool>()
+        .ok_or(InternalError::MissingUserdata("DbPool"))?
+        .clone();
     let cache_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {
@@ -336,7 +344,7 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 guild_id, kind, msg.id
             );
 
-            let db = db_arc.lock().await;
+            let db = db_pool.get().expect("failed to get db connection from pool");
             let actions = match module.get_actions(&db) {
                 Ok(a) => a,
                 Err(e) => {

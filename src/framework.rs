@@ -6,7 +6,7 @@ use crate::{
         cache::ModuleCache,
         Module, ModuleKind,
     },
-    BotUptime, DbConnection, ShardMetadata,
+    BotUptime, DbPool, ShardMetadata,
 };
 use chrono::Utc;
 use humantime::format_duration;
@@ -232,10 +232,9 @@ impl Command {
             Command::Module { module, subcommand } => {
                 let guild_id = msg.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
                 let db = data
-                    .get::<DbConnection>()
-                    .ok_or(InternalError::MissingUserdata("DbConnection"))?
-                    .lock()
-                    .await;
+                    .get::<DbPool>()
+                    .ok_or(InternalError::MissingUserdata("DbPool"))?
+                    .get()?;
 
                 match (module, subcommand) {
                     (Some(module), subcommand) => {
@@ -281,10 +280,9 @@ impl ModuleSubcommand {
     async fn run(self, mut module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         let data = ctx.data.read().await;
         let db = data
-            .get::<DbConnection>()
-            .ok_or(InternalError::MissingUserdata("DbConnection"))?
-            .lock()
-            .await;
+            .get::<DbPool>()
+            .ok_or(InternalError::MissingUserdata("DbPool"))?
+            .get()?;
         let module_cache = data
             .get::<ModuleCache>()
             .ok_or(InternalError::MissingUserdata("ModuleCache"))?;

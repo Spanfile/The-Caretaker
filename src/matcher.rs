@@ -8,7 +8,7 @@ use crate::{
         settings::{ModuleSettings, Settings},
         ModuleKind,
     },
-    DbConnection,
+    DbPool,
 };
 use crosspost::Crosspost;
 use log::*;
@@ -156,10 +156,9 @@ where
 
         let settings = {
             let db = data
-                .get::<DbConnection>()
-                .ok_or(InternalError::MissingUserdata("DbConnection"))?
-                .lock()
-                .await;
+                .get::<DbPool>()
+                .ok_or(InternalError::MissingUserdata("DbPool"))?
+                .get()?;
             module.get_settings(&db)?.try_into()?
         };
 
