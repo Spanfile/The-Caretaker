@@ -38,8 +38,13 @@ use matcher::MatcherResponse;
 use module::{action::Action, cache::ModuleCache};
 use serde::Deserialize;
 use serenity::{
-    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
-    model::prelude::*, prelude::*, CacheAndHttp, Client,
+    async_trait,
+    client::bridge::gateway::{event::ShardStageUpdateEvent, GatewayIntents},
+    gateway::ConnectionStage,
+    http::Http,
+    model::prelude::*,
+    prelude::*,
+    CacheAndHttp, Client,
 };
 use std::{
     collections::HashMap,
@@ -239,6 +244,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     let client = Client::builder(token)
         .event_handler(Handler)
         .framework(framework)
+        .intents(GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES)
         .await?;
     Ok(client)
 }
