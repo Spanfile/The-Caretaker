@@ -11,6 +11,7 @@ extern crate diesel;
 #[macro_use]
 extern crate diesel_migrations;
 
+mod config;
 mod error;
 mod ext;
 mod framework;
@@ -27,6 +28,7 @@ mod migrations {
     embed_migrations!();
 }
 
+use config::Config;
 use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
@@ -36,7 +38,6 @@ use framework::CaretakerFramework;
 use log::*;
 use matcher::MatcherResponse;
 use module::{action::Action, cache::ModuleCache};
-use serde::Deserialize;
 use serenity::{
     async_trait,
     client::bridge::gateway::{event::ShardStageUpdateEvent, GatewayIntents},
@@ -57,31 +58,6 @@ use tokio::{
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Deserialize, Debug)]
-#[serde(default)]
-pub struct Config {
-    discord_token: String,
-    latency_update_freq_ms: u64,
-    database_url: String,
-    log_level: logging::LogLevel,
-    log_timestamps: bool,
-    log_colored: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            discord_token: String::default(),
-            log_level: logging::LogLevel::default(),
-            database_url: String::default(),
-            // serenity seems to update a shard's latency every 40 seconds so round it up to a nice one minute
-            latency_update_freq_ms: 60_000,
-            log_timestamps: true,
-            log_colored: true,
-        }
-    }
-}
 
 #[derive(Debug)]
 struct ShardMetadata {
@@ -194,7 +170,7 @@ impl Handler {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
-    let config = envy::from_env::<Config>()?;
+    let config = Config::load()?;
     logging::setup_logging(&config)?;
 
     info!("Starting...");

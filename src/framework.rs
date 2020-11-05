@@ -17,6 +17,7 @@ use std::{sync::Arc, time::Instant};
 use structopt::{clap, StructOpt};
 use tokio::sync::broadcast;
 
+// TODO: per-guild command prefixes
 pub const COMMAND_PREFIX: &str = "-ct";
 const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
 const UNICODE_CHECK: char = '\u{2705}';
@@ -49,6 +50,7 @@ impl Framework for CaretakerFramework {
         let channel_id = msg.channel_id;
         let start = Instant::now();
         match self.process_message(&ctx, msg).await {
+            // TODO: allow guild moderators to set an error channel where these errors are posted into
             Err(ProcessingError::MessageError(e)) => warn!("Message processing failed: {}", e),
             Err(ProcessingError::CommandError(e)) => {
                 error!("Command processing failed: {}", e);
