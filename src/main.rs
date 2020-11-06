@@ -39,13 +39,8 @@ use log::*;
 use matcher::MatcherResponse;
 use module::{action::Action, cache::ModuleCache};
 use serenity::{
-    async_trait,
-    client::bridge::gateway::{event::ShardStageUpdateEvent, GatewayIntents},
-    gateway::ConnectionStage,
-    http::Http,
-    model::prelude::*,
-    prelude::*,
-    CacheAndHttp, Client,
+    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
+    model::prelude::*, prelude::*, CacheAndHttp, Client,
 };
 use std::{
     collections::HashMap,
@@ -121,6 +116,11 @@ impl EventHandler for Handler {
             info!("Shard {} reconnected, resetting last connected time", update.shard_id);
             self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
         }
+    }
+
+    async fn cache_ready(&self, _ctx: Context, guilds: Vec<GuildId>) {
+        debug!("Cache ready. # of guilds: {}", guilds.len());
+        debug!("{:?}", guilds);
     }
 }
 
@@ -220,7 +220,9 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     let client = Client::builder(token)
         .event_handler(Handler)
         .framework(framework)
-        .intents(GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES)
+        // specifying a stricter set of intents than literally all of them seems to disallow serenity's cache from
+        // functioning, which in turn breaks a lot of other things
+        //.intents(GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES)
         .await?;
     Ok(client)
 }

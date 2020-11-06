@@ -1,4 +1,4 @@
-use super::{enabled_string, module_subcommand::ModuleSubcommand, respond_embed};
+use super::{enabled_string, module_subcommand::ModuleSubcommand, react_success, respond_embed};
 use crate::{
     error::{ArgumentError, InternalError},
     ext::{DurationExt, UserdataExt},
@@ -25,6 +25,8 @@ pub enum Command {
     Status,
     /// Deliberately returns an error
     Fail,
+    /// Reacts to the message with a success emoji
+    Success,
     /// Configure the various Caretaker modules
     Module {
         /// The name of the module to configure
@@ -50,6 +52,7 @@ impl Command {
     pub async fn run(self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         match self {
             Command::Fail => Err(InternalError::DeliberateError.into()),
+            Command::Success => react_success(ctx, &msg).await,
             Command::Status => status_command(ctx, msg).await,
             Command::Module { module, subcommand } => module_command(module, subcommand, ctx, msg).await,
         }
