@@ -29,4 +29,6 @@ pub enum ArgumentError {
     ChannelNotInGuild(ChannelId),
     #[error("No such setting: {0}")]
     NoSuchSetting(String),
+    #[error("Invalid notify message format: {0}")]
+    InvalidNotifyFormat(String),
 }

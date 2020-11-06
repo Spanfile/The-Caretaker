@@ -1,12 +1,14 @@
+use crate::error::{ArgumentError, InternalError};
 use diesel_derive_enum::DbEnum;
+use dynfmt::{Format, SimpleCurlyFormat};
+use erased_serde::Serialize;
 use serenity::{
     model::{channel::Message, id::ChannelId},
+    prelude::*,
     CacheAndHttp,
 };
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashMap};
 use strum::{Display, EnumMessage, EnumString};
-
-use crate::error::InternalError;
 
 // the database schema holds its own version of this enum, remember to modify it as well if modying this one
 #[derive(Debug, EnumString, EnumMessage, Display, Copy, Clone, DbEnum)]
@@ -67,7 +69,7 @@ impl<'a> Action<'a> {
         }
     }
 
-    pub async fn run(&self, cache_http: &CacheAndHttp, msg: &Message) -> anyhow::Result<()> {
+    pub async fn run(self, cache_http: &CacheAndHttp, msg: &Message) -> anyhow::Result<()> {
         match self.kind {
             ActionKind::RemoveMessage => {
                 msg.delete(cache_http).await?;
@@ -75,18 +77,29 @@ impl<'a> Action<'a> {
             ActionKind::Notify => {
                 let message = self
                     .message
-                    .clone()
                     .ok_or_else(|| InternalError::ImpossibleCase(String::from("missing message in action")))?;
+                let formatted = SimpleCurlyFormat
+                    .format(message.as_ref(), build_format_args(msg))
+                    .map_err(|e| ArgumentError::InvalidNotifyFormat(e.to_string()))?;
 
                 match self.channel {
                     Some(notify_channel) => notify_channel,
                     None => msg.channel_id,
                 }
-                .send_message(&cache_http.http, |m| m.content(message))
+                .send_message(&cache_http.http, |m| m.content(formatted))
                 .await?;
             }
         }
 
         Ok(())
     }
+}
+
+fn build_format_args<'a>(msg: &'a Message) -> HashMap<&'static str, Box<dyn Serialize + 'a>> {
+    let mut args: HashMap<&'static str, Box<dyn Serialize>> = HashMap::new();
+    args.insert("user", Box::new(msg.author.mention()));
+    args.insert("channel", Box::new(msg.channel_id.mention()));
+    args.insert("timestamp", Box::new(msg.timestamp));
+    args.insert("link", Box::new(msg.link()));
+    args
 }

@@ -342,17 +342,18 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
 
 fn spawn_action_runner(action: Action<'static>, cache_http: Arc<CacheAndHttp>, msg: Arc<Message>) {
     tokio::spawn(async move {
+        let action_dbg_display = format!("{:?}", action);
         let start = Instant::now();
         if let Err(e) = action.run(&cache_http, &msg).await {
             error!(
-                "Failed to run {:?} against guild {:?} channel {} message {}: {}",
-                action, msg.guild_id, msg.channel_id, msg.id, e
+                "Failed to run {} against guild {:?} channel {} message {}: {}",
+                action_dbg_display, msg.guild_id, msg.channel_id, msg.id, e
             );
         }
 
         debug!(
-            "Running {:?} against guild {:?} channel {} message {} took {:?}",
-            action,
+            "Running {} against guild {:?} channel {} message {} took {:?}",
+            action_dbg_display,
             msg.guild_id,
             msg.channel_id,
             msg.id,

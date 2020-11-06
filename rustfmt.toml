@@ -5,5 +5,6 @@ max_width = 120
 merge_derives = true
 merge_imports = true
 normalize_comments = true
+reorder_imports = true
 unstable_features = true
 wrap_comments = true
