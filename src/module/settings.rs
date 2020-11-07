@@ -142,6 +142,8 @@ macro_rules! create_settings {
     };
 }
 
+// there have to be identical empty settings for each type instead of them all sharing one empty settings type because
+// enum_dispatch requires each variant in the settings enum to contain an unique type
 create_empty_settings!(
     MassPingSettings,
     DynamicSlowmodeSettings,
