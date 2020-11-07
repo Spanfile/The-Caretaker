@@ -86,7 +86,7 @@ impl Module {
             modules.insert(m.module, m.into());
         }
 
-        debug!("{:#?}", modules);
+        debug!("{:?}", modules);
         Ok(modules)
     }
 
@@ -99,7 +99,7 @@ impl Module {
             .optional()?
             .map_or_else(|| Module::default_with_kind_and_guild(kind, guild), Module::from);
 
-        debug!("{:#?}", module);
+        debug!("{:?}", module);
         Ok(module)
     }
 
@@ -135,7 +135,7 @@ impl Module {
             .returning(modules::guild)
             .get_result::<i64>(db)?;
 
-        debug!("{:?}: insert {:#?}", self, enabled_setting);
+        debug!("{:?}: insert {:?}", self, enabled_setting);
         Ok(())
     }
 
@@ -167,7 +167,7 @@ impl Module {
             })
             .collect::<Result<_, _>>()?;
 
-        debug!("{:?}: {:#?}", self, actions);
+        debug!("{:?}: {:?}", self, actions);
         Ok(actions)
     }
 
