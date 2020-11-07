@@ -98,7 +98,8 @@ impl CaretakerFramework {
         let cmd_str = msg.content.strip_prefix(COMMAND_PREFIX).ok_or_else(|| {
             InternalError::ImpossibleCase(String::from("given message content does not start with COMMAND_PREFIX"))
         })?;
-        let command = Command::from_iter_safe(shellwords::split(cmd_str)?)?;
+        // TODO: figure out why collecting the results doesn't work
+        let command = Command::from_iter_safe(shtring::Parser::new(cmd_str).filter_map(|s| s.ok()))?;
 
         info!(
             "{} ({}) ({:?}): {:?}",

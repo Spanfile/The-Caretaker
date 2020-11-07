@@ -1315,13 +1315,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "shellwords"
-version = "1.1.0"
+name = "shtring"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89e515aa4699a88148ed5ef96413ceef0048ce95b43fbc955a33bde0a70fcae6"
+checksum = "2b415c753b65a9007250261d77b0df3c85ebc446e9a129b9a26d21502f93e0f4"
 dependencies = [
- "lazy_static",
- "regex",
+ "thiserror",
 ]
 
 [[package]]
@@ -1472,7 +1471,7 @@ dependencies = [
  "nilsimsa",
  "serde",
  "serenity",
- "shellwords",
+ "shtring",
  "structopt",
  "strum",
  "thiserror",
