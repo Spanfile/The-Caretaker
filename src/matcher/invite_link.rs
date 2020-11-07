@@ -19,26 +19,21 @@ impl Matcher for InviteLink {
     }
 
     async fn is_match(&mut self, _: Self::SettingsType, msg: &Message) -> anyhow::Result<bool> {
-        for word in msg.content.split_whitespace() {
-            match Url::parse(word) {
-                Ok(url) => match url.host_str() {
-                    Some(host) if DISCORD_URLS.contains(&host) => {
-                        debug!("{} is a Discord URL", url);
+        for url in msg.content.split_whitespace().filter_map(|word| Url::parse(word).ok()) {
+            match url.host_str() {
+                Some(host) if DISCORD_URLS.contains(&host) => {
+                    debug!("{} is a Discord URL", url);
 
-                        if let Some(segments) = url.path_segments() {
-                            if let Some(last_segment) = segments.last() {
-                                // if the last segment is something, but not "invite" (as in discord.com/invite), it's
-                                // probably an invite
-                                if !last_segment.is_empty() && last_segment != INVITE_PATH {
-                                    debug!("{} looks like an invite", url);
-                                    return Ok(true);
-                                }
-                            }
+                    if let Some(last_segment) = url.path_segments().and_then(|s| s.last()) {
+                        // if the last segment is something, but not "invite" (as in discord.com/invite), it's
+                        // probably an invite
+                        if !last_segment.is_empty() && last_segment != INVITE_PATH {
+                            debug!("{} looks like an invite", url);
+                            return Ok(true);
                         }
                     }
-                    _ => continue,
-                },
-                Err(e) => debug!("{} is not an URL: {}", word, e),
+                }
+                _ => continue,
             }
         }
 
