@@ -1,4 +1,5 @@
 mod crosspost;
+mod invite_link;
 mod mass_ping;
 mod selfbot;
 
@@ -13,6 +14,7 @@ use crate::{
     DbPool,
 };
 use crosspost::Crosspost;
+use invite_link::InviteLink;
 use log::*;
 use mass_ping::MassPing;
 use selfbot::Selfbot;
@@ -52,7 +54,7 @@ pub fn spawn_message_matchers(
         };
     }
 
-    matchers!(Crosspost, MassPing, Selfbot);
+    matchers!(Crosspost, MassPing, Selfbot, InviteLink);
 }
 
 async fn run_matcher<M>(
