@@ -1,5 +1,6 @@
 mod crosspost;
 mod mass_ping;
+mod selfbot;
 
 use crate::{
     error::InternalError,
@@ -14,6 +15,7 @@ use crate::{
 use crosspost::Crosspost;
 use log::*;
 use mass_ping::MassPing;
+use selfbot::Selfbot;
 use serenity::{async_trait, model::channel::Message, prelude::TypeMap};
 use std::{convert::TryInto, sync::Arc, time::Instant};
 use tokio::sync::{
@@ -50,7 +52,7 @@ pub fn spawn_message_matchers(
         };
     }
 
-    matchers!(Crosspost, MassPing);
+    matchers!(Crosspost, MassPing, Selfbot);
 }
 
 async fn run_matcher<M>(

@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use super::Matcher;
 use crate::module::{settings::MassPingSettings, ModuleKind};
 use serenity::{async_trait, model::channel::Message, prelude::TypeMap};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct MassPing {}
