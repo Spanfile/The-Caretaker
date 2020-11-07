@@ -50,18 +50,18 @@ impl Framework for CaretakerFramework {
         let channel_id = msg.channel_id;
         let start = Instant::now();
         match self.process_message(&ctx, msg).await {
-            // TODO: allow guild moderators to set an error channel where these errors are posted into
-            Err(ProcessingError::MessageError(e)) => warn!("Message processing failed: {}", e),
+            Err(ProcessingError::MessageError(e)) => error!("Message processing failed: {}", e),
             Err(ProcessingError::CommandError(e)) => {
-                error!("Command processing failed: {}", e);
-
                 if let Err(e) = channel_id
                     .send_message(&ctx, |m| {
-                        if let Some(clap::Error { message, .. }) = e.downcast_ref() {
+                        if let Some(clap::Error { message, kind, .. }) = e.downcast_ref() {
+                            warn!("Command processing failed with clap {:?} error: {}", kind, e);
                             codeblock_message(message, m)
                         } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
+                            warn!("Command processing failed with argument error: {}", e);
                             argument_error_message(e, m)
                         } else {
+                            error!("Command processing failed with internal error: {}", e);
                             internal_error_message(e, m)
                         }
                     })
