@@ -27,12 +27,12 @@ use strum::{Display, EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 pub enum ModuleKind {
     MassPing,
     Crosspost,
-    DynamicSlowmode,
-    UserSlowmode,
     EmojiSpam,
     MentionSpam,
     Selfbot,
     InviteLink,
+    ChannelActivity,
+    UserActivity,
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -23,12 +23,12 @@ pub trait Settings {
 pub enum ModuleSettings {
     MassPingSettings,
     CrosspostSettings,
-    DynamicSlowmodeSettings,
-    UserSlowmodeSettings,
     EmojiSpamSettings,
     MentionSpamSettings,
     SelfbotSettings,
     InviteLinkSettings,
+    ChannelActivitySettings,
+    UserActivitySettings,
 }
 
 impl ModuleSettings {
@@ -36,14 +36,14 @@ impl ModuleSettings {
         match module {
             ModuleKind::MassPing => Ok(Self::MassPingSettings(MassPingSettings::from_db_rows(rows)?)),
             ModuleKind::Crosspost => Ok(Self::CrosspostSettings(CrosspostSettings::from_db_rows(rows)?)),
-            ModuleKind::DynamicSlowmode => Ok(Self::DynamicSlowmodeSettings(DynamicSlowmodeSettings::from_db_rows(
-                rows,
-            )?)),
-            ModuleKind::UserSlowmode => Ok(Self::UserSlowmodeSettings(UserSlowmodeSettings::from_db_rows(rows)?)),
             ModuleKind::EmojiSpam => Ok(Self::EmojiSpamSettings(EmojiSpamSettings::from_db_rows(rows)?)),
             ModuleKind::MentionSpam => Ok(Self::MentionSpamSettings(MentionSpamSettings::from_db_rows(rows)?)),
             ModuleKind::Selfbot => Ok(Self::SelfbotSettings(SelfbotSettings::from_db_rows(rows)?)),
             ModuleKind::InviteLink => Ok(Self::InviteLinkSettings(InviteLinkSettings::from_db_rows(rows)?)),
+            ModuleKind::ChannelActivity => Ok(Self::ChannelActivitySettings(ChannelActivitySettings::from_db_rows(
+                rows,
+            )?)),
+            ModuleKind::UserActivity => Ok(Self::UserActivitySettings(UserActivitySettings::from_db_rows(rows)?)),
         }
     }
 }
@@ -146,12 +146,12 @@ macro_rules! create_settings {
 // enum_dispatch requires each variant in the settings enum to contain an unique type
 create_empty_settings!(
     MassPingSettings,
-    DynamicSlowmodeSettings,
-    UserSlowmodeSettings,
     EmojiSpamSettings,
     MentionSpamSettings,
     SelfbotSettings,
-    InviteLinkSettings
+    InviteLinkSettings,
+    ChannelActivitySettings,
+    UserActivitySettings
 );
 
 create_settings!(
