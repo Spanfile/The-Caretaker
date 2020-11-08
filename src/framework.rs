@@ -10,7 +10,7 @@ use serenity::{
     builder::{CreateEmbed, CreateMessage},
     client::Context,
     framework::Framework,
-    model::channel::Message,
+    model::channel::{Message, MessageType},
     utils::Colour,
 };
 use std::{sync::Arc, time::Instant};
@@ -35,8 +35,8 @@ enum ProcessingError {
 #[async_trait]
 impl Framework for CaretakerFramework {
     async fn dispatch(&self, ctx: Context, msg: Message) {
-        // straight-up ignore bot messages
-        if !is_from_user(&msg) {
+        // straight-up ignore bot messages and non-regular messages
+        if is_from_bot(&msg) || !is_regular(&msg) {
             return;
         }
 
@@ -170,6 +170,10 @@ fn enabled_string(enabled: bool) -> String {
     }
 }
 
-fn is_from_user(msg: &Message) -> bool {
-    !msg.author.bot
+fn is_from_bot(msg: &Message) -> bool {
+    msg.author.bot
+}
+
+fn is_regular(msg: &Message) -> bool {
+    msg.kind == MessageType::Regular
 }
