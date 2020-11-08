@@ -106,16 +106,7 @@ where
                 Err(e) => return Err(e.into()),
             };
 
-            let start = Instant::now();
-            let result = self.is_match(&msg).await;
-            debug!(
-                "{}: returned match result {:?} in {:?}",
-                self.kind,
-                result,
-                start.elapsed()
-            );
-
-            match result {
+            match self.run_matcher(&msg).await {
                 Ok(true) => {
                     debug!(
                         "{}: matched message {} in channel {} in guild {:?} by {}",
@@ -133,16 +124,11 @@ where
         }
     }
 
-    async fn is_match(&mut self, msg: &Message) -> anyhow::Result<bool> {
-        let guild_id = if let Some(id) = msg.guild_id {
-            id
-        } else {
-            warn!("{}: missing guild in message (is the message a DM?)", self.kind);
-            return Ok(false);
-        };
-
+    async fn run_matcher(&mut self, msg: &Message) -> anyhow::Result<bool> {
         let data = self.userdata.read().await;
+        let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
         let module = data.get_userdata::<ModuleCache>()?.get(guild_id, self.kind).await;
+
         if !module.enabled() {
             debug!("{}: module disabled, not matching", self.kind);
             return Ok(false);
@@ -157,6 +143,15 @@ where
             })?
         };
 
-        self.matcher.is_match(settings, &msg).await
+        let start = Instant::now();
+        let result = self.matcher.is_match(settings, &msg).await;
+        debug!(
+            "{}: returned match result {:?} in {:?}",
+            self.kind,
+            result,
+            start.elapsed()
+        );
+
+        result
     }
 }

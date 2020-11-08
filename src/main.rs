@@ -311,13 +311,7 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 return;
             };
 
-            let guild_id = if let Some(id) = msg.guild_id {
-                id
-            } else {
-                warn!("Missing guild in action handler message (is the message a DM?)");
-                continue;
-            };
-
+            let guild_id = msg.guild_id.expect("no guild ID in message");
             let module = module_cache.get(guild_id, kind).await;
             debug!(
                 "Running actions for guild {} module {} message {}",

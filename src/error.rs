@@ -17,6 +17,8 @@ pub enum InternalError {
     ImpossibleCase(String),
     #[error("Conversion failed: {0}")]
     ConversionFailed(&'static str),
+    #[error("Missing guild ID")]
+    MissingGuildID,
 }
 
 #[derive(Error, Debug)]
