@@ -173,10 +173,11 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
     logging::setup_logging(&config)?;
 
-    info!("Starting...");
+    info!("Starting version {}", VERSION);
     debug!("{:#?}", config);
 
     let db_pool = build_db_pool(&config.database_url)?;
+    info!("Database connection established");
     let module_cache = ModuleCache::populate_from_db(&db_pool.get()?)?;
 
     let (msg_tx, _) = broadcast::channel(64);
@@ -190,7 +191,7 @@ async fn main() -> anyhow::Result<()> {
     spawn_shard_latency_ticker(&client, config.latency_update_freq_ms);
     spawn_termination_waiter(&client);
 
-    debug!("Starting autosharded client...");
+    info!("Starting client...");
     match client.start_autosharded().await {
         Ok(_) => info!("Client shut down succesfully!"),
         Err(e) => error!("Client returned error: {}", e),
@@ -214,7 +215,13 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     let appinfo = http.get_current_application_info().await?;
 
     debug!("{:#?}", appinfo);
-    info!("Connected with application {}. Own ID: {}", appinfo.name, appinfo.id);
+    info!(
+        "Connected with application {} ({}). Owned by {} ({})",
+        appinfo.name,
+        appinfo.id,
+        appinfo.owner.tag(),
+        appinfo.owner.id
+    );
 
     let framework = CaretakerFramework::new(msg_tx);
     let client = Client::builder(token)
