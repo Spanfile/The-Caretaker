@@ -129,7 +129,7 @@ where
         let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
         let module = data.get_userdata::<ModuleCache>()?.get(guild_id, self.kind).await;
 
-        if !module.enabled() {
+        if !module.is_enabled() {
             debug!("{}: module disabled, not matching", self.kind);
             return Ok(false);
         }

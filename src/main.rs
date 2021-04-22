@@ -15,6 +15,7 @@ mod config;
 mod error;
 mod ext;
 mod framework;
+mod guild_settings;
 mod logging;
 mod matcher;
 mod models;
@@ -128,7 +129,7 @@ impl Handler {
     async fn set_info_activity(&self, ctx: &Context, shard: u64, shards: u64) {
         ctx.set_activity(Activity::playing(&format!(
             "{} [{}] [{}/{}]",
-            framework::COMMAND_PREFIX,
+            framework::DEFAULT_COMMAND_PREFIX,
             VERSION,
             shard + 1,
             shards

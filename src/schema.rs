@@ -16,6 +16,16 @@ table! {
     use diesel::sql_types::*;
     use crate::module::dbimport::*;
 
+    guild_settings (guild) {
+        guild -> Int8,
+        prefix -> Nullable<Text>,
+    }
+}
+
+table! {
+    use diesel::sql_types::*;
+    use crate::module::dbimport::*;
+
     module_settings (guild, module, setting) {
         guild -> Int8,
         module -> Module_kind,
@@ -37,6 +47,7 @@ table! {
 
 allow_tables_to_appear_in_same_query!(
     actions,
+    guild_settings,
     module_settings,
     modules,
 );

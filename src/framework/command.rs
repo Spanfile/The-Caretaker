@@ -1,4 +1,4 @@
-use super::{enabled_string, module_subcommand::ModuleSubcommand, react_success, respond_embed};
+use super::module_subcommand::ModuleSubcommand;
 use crate::{
     error::{ArgumentError, InternalError},
     ext::{DurationExt, UserdataExt},
@@ -15,9 +15,10 @@ use strum::VariantNames;
 #[structopt(
     global_settings(&[clap::AppSettings::NoBinaryName,
         clap::AppSettings::DisableHelpFlags,
-        clap::AppSettings::DisableVersion]),
+        clap::AppSettings::DisableVersion,
+        clap::AppSettings::AllowLeadingHyphen]),
     set_term_width(0),
-    name = super::COMMAND_PREFIX,
+    name = super::DEFAULT_COMMAND_PREFIX,
     no_version
 )]
 pub enum Command {
@@ -46,15 +47,34 @@ pub enum Command {
         #[structopt(subcommand)]
         subcommand: ModuleSubcommand,
     },
+    /// Sets Caretaker's command prefix
+    SetPrefix {
+        /// The custom prefix
+        // leading hyphens are allowed on this value through the AllowLeadingHyphen clap setting
+        prefix: String,
+    },
+    /// Resets Caretaker's command prefix to the default
+    ResetPrefix,
 }
 
 impl Command {
     pub async fn run(self, ctx: &Context, msg: Message) -> anyhow::Result<()> {
         match self {
             Command::Fail => Err(InternalError::DeliberateError.into()),
-            Command::Success => react_success(ctx, &msg).await,
+            Command::Success => super::react_success(ctx, &msg).await,
             Command::Status => status_command(ctx, msg).await,
             Command::Module { module, subcommand } => module_command(module, subcommand, ctx, msg).await,
+            Command::SetPrefix { prefix } => {
+                let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
+                super::set_guild_prefix(ctx, guild_id, Some(prefix)).await?;
+                super::react_success(ctx, &msg).await
+            }
+            // TODO: doesn't actually set the database column to NULL
+            Command::ResetPrefix => {
+                let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
+                super::set_guild_prefix(ctx, guild_id, None).await?;
+                super::react_success(ctx, &msg).await
+            }
         }
     }
 }
@@ -69,7 +89,7 @@ async fn status_command(ctx: &Context, msg: Message) -> anyhow::Result<()> {
     let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
     let bot_uptime = data.get_userdata::<BotUptime>()?.elapsed().round_to_seconds();
 
-    respond_embed(ctx, &msg, |e| {
+    super::respond_embed(ctx, &msg, |e| {
         e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
         e.field("Guilds", format!("{}", own_shard.guilds), true);
         e.field("Bot uptime", format!("{}", format_duration(bot_uptime)), true);
@@ -112,11 +132,11 @@ async fn module_command(
                 Module::get_all_modules_for_guild(guild_id, &db)?
             };
 
-            respond_embed(ctx, &msg, |e| {
+            super::respond_embed(ctx, &msg, |e| {
                 e.title("Status of all modules");
 
                 for (kind, module) in modules {
-                    e.field(kind, enabled_string(module.enabled()), true);
+                    e.field(kind, super::enabled_string(module.is_enabled()), true);
                 }
                 e
             })

@@ -111,7 +111,7 @@ impl Module {
         self.guild
     }
 
-    pub fn enabled(self) -> bool {
+    pub fn is_enabled(self) -> bool {
         self.enabled
     }
 

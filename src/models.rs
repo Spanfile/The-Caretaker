@@ -1,4 +1,4 @@
-use super::schema::{actions, module_settings, modules};
+use super::schema::{actions, guild_settings, module_settings, modules};
 use crate::module::{action::ActionKind, ModuleKind};
 
 #[derive(Queryable, Insertable, AsChangeset, Debug)]
@@ -43,4 +43,17 @@ pub struct NewModuleSetting<'a> {
     pub module: ModuleKind,
     pub setting: &'a str,
     pub value: &'a str,
+}
+
+#[derive(Queryable, Debug)]
+pub struct GuildSettings {
+    pub guild: i64,
+    pub prefix: Option<String>,
+}
+
+#[derive(Insertable, AsChangeset, Debug)]
+#[table_name = "guild_settings"]
+pub struct NewGuildSettings<'a> {
+    pub guild: i64,
+    pub prefix: Option<&'a str>,
 }

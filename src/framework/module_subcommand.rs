@@ -107,7 +107,7 @@ async fn get_enabled(module: Module, ctx: &Context, msg: Message) -> anyhow::Res
         m.content(format!(
             "The `{}` module is: {}",
             module.kind(),
-            enabled_string(module.enabled())
+            enabled_string(module.is_enabled())
         ))
     })
     .await
