@@ -64,7 +64,7 @@ impl GuildSettings {
             .returning(guild_settings::guild)
             .get_result::<i64>(db)?;
 
-        debug!("GuildSettings insert {:?}", new_settings);
+        debug!("{:?}: insert {:?}", self, new_settings);
         Ok(())
     }
 }

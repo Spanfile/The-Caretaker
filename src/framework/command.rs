@@ -16,6 +16,7 @@ use strum::VariantNames;
 #[structopt(
     global_settings(&[clap::AppSettings::NoBinaryName,
         clap::AppSettings::DisableHelpFlags,
+        clap::AppSettings::DisableHelpSubcommand,
         clap::AppSettings::DisableVersion,
         clap::AppSettings::AllowLeadingHyphen]),
     set_term_width(0),
@@ -79,19 +80,34 @@ async fn status_command(ctx: &Context, msg: Message) -> anyhow::Result<()> {
         .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
 
     let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
-    let bot_uptime = data.get_userdata::<BotUptime>()?.elapsed().round_to_seconds();
+    let bot_uptime = (Utc::now() - *data.get_userdata::<BotUptime>()?).round_to_seconds();
+    let total_guilds: usize = shards.values().map(|shard| shard.guilds).sum();
 
     super::respond_embed(ctx, &msg, |e| {
-        e.field("Shard", format!("{}/{}", own_shard.id + 1, shards.len()), true);
-        e.field("Guilds", format!("{}", own_shard.guilds), true);
-        e.field("Bot uptime", format!("{}", format_duration(bot_uptime)), true);
-        e.field("Shard uptime", format!("{}", format_duration(own_uptime)), true);
+        e.field(
+            "Shard / total shards",
+            format!("{}/{}", own_shard.id + 1, shards.len(),),
+            true,
+        );
+        e.field(
+            "Guilds / total guilds",
+            format!("{}/{}", own_shard.guilds, total_guilds),
+            true,
+        );
+        e.field(
+            "Bot / shard uptime",
+            format!("{} / {}", format_duration(bot_uptime), format_duration(own_uptime)),
+            false,
+        );
 
+        let mut latencies = String::new();
         if let Some(latency) = own_shard.latency {
-            e.field("GW latency", format!("{:?}", latency), true);
+            latencies += &format!("GW: {} ms\n", latency.as_millis());
         } else {
-            e.field("GW latency", "n/a", true);
+            latencies += "GW: n/a\n"
         }
+
+        e.field("Latencies", latencies, false);
 
         // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
         // which will construct the timestamp string out of it.`, but serenity itself implements the

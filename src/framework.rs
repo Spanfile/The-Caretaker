@@ -26,7 +26,6 @@ use structopt::{clap, StructOpt};
 use thiserror::Error;
 use tokio::sync::broadcast;
 
-// TODO: per-guild command prefixes
 pub const DEFAULT_COMMAND_PREFIX: &str = "-ct";
 const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
 const UNICODE_CHECK: char = '\u{2705}';
@@ -70,10 +69,10 @@ impl Framework for CaretakerFramework {
                 if let Err(e) = channel_id
                     .send_message(&ctx, |m| {
                         if let Some(clap::Error { message, kind, .. }) = e.downcast_ref() {
-                            warn!("Command processing failed with clap {:?} error: {}", kind, e);
+                            debug!("Command processing failed with clap {:?} {}", kind, e);
                             codeblock_message(message, m)
                         } else if let Some(e) = e.downcast_ref::<ArgumentError>() {
-                            warn!("Command processing failed with argument error: {}", e);
+                            debug!("Command processing failed with argument error: {}", e);
                             argument_error_message(e, m)
                         } else {
                             error!("Command processing failed with internal error: {}", e);
@@ -127,7 +126,7 @@ impl CaretakerFramework {
         )?;
 
         info!(
-            "{} ({}) ({:?}): {:?}",
+            "{} ({}) in {:?}: {:?}",
             msg.author.tag(),
             msg.author,
             msg.guild_id,

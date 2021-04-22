@@ -12,6 +12,12 @@ impl DurationExt for Duration {
     }
 }
 
+impl DurationExt for chrono::Duration {
+    fn round_to_seconds(self) -> Duration {
+        Duration::from_secs(self.num_seconds() as u64)
+    }
+}
+
 pub trait UserdataExt {
     fn get_userdata<T>(&self) -> Result<&T::Value, InternalError>
     where

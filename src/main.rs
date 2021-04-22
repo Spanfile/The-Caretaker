@@ -29,11 +29,13 @@ mod migrations {
     embed_migrations!();
 }
 
+use chrono::{DateTime, Utc};
 use config::Config;
 use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
 };
+use error::InternalError;
 use ext::UserdataExt;
 use framework::CaretakerFramework;
 use log::*;
@@ -75,7 +77,7 @@ impl TypeMapKey for DbPool {
 
 struct BotUptime {}
 impl TypeMapKey for BotUptime {
-    type Value = Instant;
+    type Value = DateTime<Utc>;
 }
 
 struct Handler;
@@ -170,11 +172,13 @@ impl Handler {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let start_time = Utc::now();
+
     dotenv::dotenv()?;
     let config = Config::load()?;
     logging::setup_logging(&config)?;
 
-    info!("Starting version {}", VERSION);
+    info!("Starting Caretaker version {}", VERSION);
     debug!("{:#?}", config);
 
     let db_pool = build_db_pool(&config.database_url)?;
@@ -185,7 +189,7 @@ async fn main() -> anyhow::Result<()> {
     let (action_tx, action_rx) = mpsc::channel(8);
 
     let mut client = create_discord_client(&config.discord_token, msg_tx.clone()).await?;
-    populate_userdata(&client, module_cache, db_pool).await?;
+    populate_userdata(&client, module_cache, db_pool, start_time).await?;
 
     matcher::spawn_message_matchers(msg_tx, action_tx, client.data.clone());
     spawn_action_handler(&client, action_rx).await?;
@@ -239,6 +243,7 @@ async fn populate_userdata(
     client: &Client,
     module_cache: ModuleCache,
     db_pool: Pool<ConnectionManager<PgConnection>>,
+    start_time: DateTime<Utc>,
 ) -> anyhow::Result<()> {
     debug!("Populating userdata...");
     let mut data = client.data.write().await;
@@ -246,7 +251,7 @@ async fn populate_userdata(
     data.insert::<ModuleCache>(module_cache);
     data.insert::<ShardMetadata>(HashMap::default());
     data.insert::<DbPool>(db_pool);
-    data.insert::<BotUptime>(Instant::now());
+    data.insert::<BotUptime>(start_time);
 
     Ok(())
 }
@@ -319,14 +324,28 @@ async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherRes
                 return;
             };
 
-            let guild_id = msg.guild_id.expect("no guild ID in message");
+            let guild_id = match msg.guild_id.ok_or(InternalError::MissingGuildID) {
+                Ok(id) => id,
+                Err(e) => {
+                    error!("{}", e);
+                    continue;
+                }
+            };
+
             let module = module_cache.get(guild_id, kind).await;
             debug!(
                 "Running actions for guild {} module {} message {}",
                 guild_id, kind, msg.id
             );
 
-            let db = db_pool.get().expect("failed to get db connection from pool");
+            let db = match db_pool.get() {
+                Ok(db) => db,
+                Err(e) => {
+                    error!("Failed to get database connection from pool: {}", e);
+                    continue;
+                }
+            };
+
             let actions = match module.get_actions(&db) {
                 Ok(a) => a,
                 Err(e) => {
