@@ -62,7 +62,7 @@ impl<'a> Action<'a> {
                 String::from("Remove the message, nothing special about it")
             }
             ActionKind::Notify => match (&self.message, self.channel) {
-                (None, _) => panic!(format!("invalid action: kind is {} but message is None", self.kind)),
+                (None, _) => panic!("invalid action: kind is {} but message is None", self.kind),
                 (Some(msg), None) => format!("In the same channel with `{}`", msg),
                 (Some(msg), Some(channel)) => format!("In <#{}> with `{}`", channel, msg),
             },
@@ -97,8 +97,8 @@ impl<'a> Action<'a> {
 
 fn build_format_args<'a>(msg: &'a Message) -> HashMap<&'static str, Box<dyn Serialize + 'a>> {
     let mut args: HashMap<&'static str, Box<dyn Serialize>> = HashMap::new();
-    args.insert("user", Box::new(msg.author.mention()));
-    args.insert("channel", Box::new(msg.channel_id.mention()));
+    args.insert("user", Box::new(msg.author.mention().to_string()));
+    args.insert("channel", Box::new(msg.channel_id.mention().to_string()));
     args.insert("timestamp", Box::new(msg.timestamp));
     args.insert("link", Box::new(msg.link()));
     args

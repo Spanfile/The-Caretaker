@@ -2,8 +2,8 @@
 #![warn(clippy::needless_pass_by_value)]
 #![warn(clippy::non_ascii_literal)]
 #![warn(clippy::panic_in_result_fn)]
-#![warn(clippy::clippy::too_many_lines)]
-#![warn(clippy::clippy::single_match_else)]
+#![warn(clippy::too_many_lines)]
+#![warn(clippy::single_match_else)]
 
 // ew what is this, rust 2015?
 #[macro_use]
@@ -258,7 +258,7 @@ fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
     tokio::spawn(async move {
         debug!("Starting shard latency update loop");
         loop {
-            time::delay_for(Duration::from_millis(update_freq)).await;
+            time::sleep(Duration::from_millis(update_freq)).await;
 
             let manager = shard_manager.lock().await;
             let runners = manager.runners.lock().await;
