@@ -2,6 +2,7 @@ use super::module_subcommand::ModuleSubcommand;
 use crate::{
     error::{ArgumentError, InternalError},
     ext::{DurationExt, UserdataExt},
+    guild_settings::GuildSettings,
     module::{Module, ModuleKind},
     BotUptime, DbPool, ShardMetadata,
 };
@@ -64,16 +65,8 @@ impl Command {
             Command::Success => super::react_success(ctx, &msg).await,
             Command::Status => status_command(ctx, msg).await,
             Command::Module { module, subcommand } => module_command(module, subcommand, ctx, msg).await,
-            Command::SetPrefix { prefix } => {
-                let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
-                super::set_guild_prefix(ctx, guild_id, Some(prefix)).await?;
-                super::react_success(ctx, &msg).await
-            }
-            Command::ResetPrefix => {
-                let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
-                super::set_guild_prefix(ctx, guild_id, None).await?;
-                super::react_success(ctx, &msg).await
-            }
+            Command::SetPrefix { prefix } => update_guild_prefix_command(ctx, msg, Some(prefix)).await,
+            Command::ResetPrefix => update_guild_prefix_command(ctx, msg, None).await,
         }
     }
 }
@@ -143,4 +136,15 @@ async fn module_command(
         }
         (m, s) => Err(InternalError::ImpossibleCase(format!("module is {:?} and subcommand is {:?}", m, s)).into()),
     }
+}
+
+async fn update_guild_prefix_command(ctx: &Context, msg: Message, pfx: Option<String>) -> anyhow::Result<()> {
+    let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+
+    let mut settings = GuildSettings::get_for_guild(guild_id, &db)?;
+    settings.set_guild_prefix(pfx, &db)?;
+
+    super::react_success(ctx, &msg).await
 }

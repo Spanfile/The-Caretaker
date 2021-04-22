@@ -6,10 +6,9 @@ use crate::{
     error::{ArgumentError, InternalError},
     ext::UserdataExt,
     guild_settings::GuildSettings,
-    models, DbPool,
+    DbPool,
 };
 use chrono::Utc;
-use diesel::prelude::*;
 use log::*;
 use serenity::{
     async_trait,
@@ -204,41 +203,9 @@ fn is_regular(msg: &Message) -> bool {
 }
 
 async fn get_guild_prefix(ctx: &Context, guild: GuildId) -> anyhow::Result<String> {
-    use crate::schema::guild_settings;
-
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
 
-    let settings = guild_settings::table
-        .filter(guild_settings::guild.eq(guild.0 as i64))
-        .first::<models::GuildSettings>(&db)
-        .optional()?
-        .map_or_else(|| GuildSettings::default_with_guild(guild), GuildSettings::from);
-
-    Ok(settings.prefix.unwrap_or_else(|| String::from(DEFAULT_COMMAND_PREFIX)))
-}
-
-async fn set_guild_prefix(ctx: &Context, guild: GuildId, prefix: Option<String>) -> anyhow::Result<()> {
-    use crate::schema::guild_settings;
-
-    let data = ctx.data.read().await;
-    let db = data.get_userdata::<DbPool>()?.get()?;
-
-    let new_settings = models::NewGuildSettings {
-        guild: guild.0 as i64,
-        prefix: prefix.as_deref(),
-    };
-
-    // return the inserted row's guild ID but don't store it anywhere, because this way diesel will error if the
-    // insert affected no rows
-    diesel::insert_into(guild_settings::table)
-        .values(&new_settings)
-        .on_conflict(guild_settings::guild)
-        .do_update()
-        .set(&new_settings)
-        .returning(guild_settings::guild)
-        .get_result::<i64>(&db)?;
-
-    debug!("GuildSettings insert {:?}", new_settings);
-    Ok(())
+    let settings = GuildSettings::get_for_guild(guild, &db)?;
+    Ok(settings.get_prefix_or_default())
 }
