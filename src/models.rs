@@ -53,6 +53,8 @@ pub struct GuildSettings {
 
 #[derive(Insertable, AsChangeset, Debug)]
 #[table_name = "guild_settings"]
+// this is required so it is possible to set the Option fields to None in an ON CONFLICT DO UPDATE
+#[changeset_options(treat_none_as_null = "true")]
 pub struct NewGuildSettings<'a> {
     pub guild: i64,
     pub prefix: Option<&'a str>,

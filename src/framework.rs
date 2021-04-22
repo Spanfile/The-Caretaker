@@ -239,6 +239,6 @@ async fn set_guild_prefix(ctx: &Context, guild: GuildId, prefix: Option<String>)
         .returning(guild_settings::guild)
         .get_result::<i64>(&db)?;
 
-    debug!("insert {:?}", new_settings);
+    debug!("GuildSettings insert {:?}", new_settings);
     Ok(())
 }

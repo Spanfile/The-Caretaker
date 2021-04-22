@@ -69,7 +69,6 @@ impl Command {
                 super::set_guild_prefix(ctx, guild_id, Some(prefix)).await?;
                 super::react_success(ctx, &msg).await
             }
-            // TODO: doesn't actually set the database column to NULL
             Command::ResetPrefix => {
                 let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
                 super::set_guild_prefix(ctx, guild_id, None).await?;
