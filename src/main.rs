@@ -103,26 +103,24 @@ impl EventHandler for Handler {
         }
     }
 
-    // the ResumedEvent contains no useful information, which is to say it contains no information
-    // async fn resume(&self, _: Context, resume: ResumedEvent) {
-    //     info!("Resumed");
-    //     debug!("{:#?}", resume);
-    // }
+    async fn resume(&self, ctx: Context, _: ResumedEvent) {
+        debug!("Shard {}: resumed", ctx.shard_id);
+    }
 
     async fn shard_stage_update(&self, ctx: Context, update: ShardStageUpdateEvent) {
         info!(
-            "Shard {} transitioned from {} to {}",
+            "Shard {}: transitioned from {} to {}",
             update.shard_id, update.old, update.new
         );
 
         if let (ConnectionStage::Resuming, ConnectionStage::Connected) = (update.old, update.new) {
-            info!("Shard {} reconnected, resetting last connected time", update.shard_id);
+            info!("Shard {}: reconnected, resetting last connected time", update.shard_id);
             self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
         }
     }
 
-    async fn cache_ready(&self, _ctx: Context, guilds: Vec<GuildId>) {
-        debug!("Cache ready. # of guilds: {}", guilds.len());
+    async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
+        debug!("Shard {}: cache ready. # of guilds: {}", ctx.shard_id, guilds.len());
         debug!("{:?}", guilds);
     }
 }
@@ -182,7 +180,11 @@ async fn main() -> anyhow::Result<()> {
     debug!("{:#?}", config);
 
     let db_pool = build_db_pool(&config.database_url)?;
-    info!("Database connection established");
+    info!(
+        "Database connection established. Total connections: {}",
+        db_pool.max_size()
+    );
+
     let module_cache = ModuleCache::populate_from_db(&db_pool.get()?)?;
 
     let (msg_tx, _) = broadcast::channel(64);
@@ -214,7 +216,7 @@ fn build_db_pool(url: &str) -> anyhow::Result<Pool<ConnectionManager<PgConnectio
 }
 
 async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Message>>) -> anyhow::Result<Client> {
-    debug!("Initialising Discord client...");
+    info!("Initialising Discord client...");
 
     let http = Http::new_with_token(token);
     let appinfo = http.get_current_application_info().await?;
@@ -300,8 +302,8 @@ fn spawn_termination_waiter(client: &Client) {
 
     let shard_manager = client.shard_manager.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
-        info!("Caught SIGINT, shutting down all shards");
+        tokio::signal::ctrl_c().await.expect("failed to listen for SIGTERM");
+        info!("Caught SIGTERM, shutting down all shards");
         shard_manager.lock().await.shutdown_all().await;
     });
 }
