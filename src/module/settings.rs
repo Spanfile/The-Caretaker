@@ -52,24 +52,30 @@ macro_rules! create_empty_settings {
     ($($settings:ident),+) => {
         $(#[derive(Debug, Default)]
         pub struct $settings {}
+
         impl FromDbRows for $settings {
             fn from_db_rows(_: &[models::ModuleSetting]) -> anyhow::Result<Self> {
                 Ok(Self {})
             }
         }
+
         impl Settings for $settings {
             fn get_all(&self) -> Vec<(&'static str, String)> {
                 vec![]
             }
+
             fn description_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)))
             }
+
             fn default_for(&self, setting: &str) -> Result<&'static str, ArgumentError> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)))
             }
+
             fn set(&mut self, setting: &str, _: &str) -> anyhow::Result<()> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)).into())
             }
+
             fn reset(&mut self, setting: &str) -> Result<(), ArgumentError> {
                 Err(ArgumentError::NoSuchSetting(String::from(setting)))
             }

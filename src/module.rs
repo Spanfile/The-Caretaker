@@ -2,7 +2,7 @@ pub mod action;
 pub mod cache;
 pub mod settings;
 pub mod dbimport {
-    pub use super::{action::Action_kind, Module_kind};
+    pub use super::{action::Action_kind, Exclusion_kind, Module_kind};
 }
 
 use self::{
@@ -33,6 +33,14 @@ pub enum ModuleKind {
     InviteLink,
     ChannelActivity,
     UserActivity,
+}
+
+// the database schema holds its own version of this enum, remember to modify it as well if modying this one
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
+#[DieselType = "Exclusion_kind"]
+pub enum ExclusionKind {
+    User,
+    Group,
 }
 
 #[derive(Debug, Copy, Clone)]

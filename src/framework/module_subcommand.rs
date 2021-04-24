@@ -50,7 +50,7 @@ pub enum ModuleSubcommand {
         #[structopt(long = "in")]
         in_channel: Option<ChannelId>,
     },
-    /// Removes a given action from the module based on its index. Use the `list-actions` subcommand to see the action
+    /// Removes a given action from the module based on its index. Use the `get-actions` subcommand to see the action
     /// indices
     RemoveAction {
         /// The index of the action to remove
@@ -70,6 +70,12 @@ pub enum ModuleSubcommand {
         /// The name of the setting
         name: String,
     },
+    /// Shows all user/group exclusions for the given module
+    GetExclusions,
+    /// Adds a new user/group exclusion to the given module
+    SetExclusion,
+    /// Removes a given user/group exclusion from the given module
+    RemoveExclusion,
 }
 
 impl ModuleSubcommand {
@@ -87,6 +93,9 @@ impl ModuleSubcommand {
             ModuleSubcommand::GetSettings => get_settings(module, ctx, msg).await,
             ModuleSubcommand::SetSetting { name, value } => set_setting(&name, &value, module, ctx, msg).await,
             ModuleSubcommand::ResetSetting { name } => reset_setting(&name, module, ctx, msg).await,
+            ModuleSubcommand::GetExclusions => get_exclusions(module, ctx, msg).await,
+            ModuleSubcommand::SetExclusion => set_exclusion(module, ctx, msg).await,
+            ModuleSubcommand::RemoveExclusion => remove_exclusion(module, ctx, msg).await,
         }
     }
 }
@@ -229,4 +238,16 @@ async fn reset_setting(name: &str, module: Module, ctx: &Context, msg: Message) 
     settings.reset(&name)?;
     module.set_settings(&settings, &db)?;
     react_success(ctx, &msg).await
+}
+
+async fn get_exclusions(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    todo!()
+}
+
+async fn set_exclusion(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    todo!()
+}
+
+async fn remove_exclusion(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+    todo!()
 }

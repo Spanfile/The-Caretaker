@@ -33,7 +33,7 @@ pub enum Command {
     /// Configure the various Caretaker modules
     Module {
         /// The name of the module to configure
-        // TODO: the required_ifs don't work
+        // TODO: the required_ifs don't work?
         #[structopt(
             possible_values(ModuleKind::VARIANTS),
             required_ifs(&[
@@ -43,6 +43,9 @@ pub enum Command {
                 ("subcommand", "remove-action"),
                 ("subcommand", "get-settings"),
                 ("subcommand", "set-setting"),
+                ("subcommand", "get-exclusions"),
+                ("subcommand", "set-exclusion"),
+                ("subcommand", "remove-exclusion")
             ])
         )]
         module: Option<ModuleKind>,
