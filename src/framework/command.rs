@@ -1,13 +1,11 @@
 use super::module_subcommand::ModuleSubcommand;
 use crate::{
     error::{ArgumentError, InternalError},
-    ext::{DurationExt, UserdataExt},
+    ext::UserdataExt,
     guild_settings::GuildSettings,
     module::{Module, ModuleKind},
-    BotUptime, DbPool, ShardMetadata,
+    DbPool,
 };
-use chrono::Utc;
-use humantime::format_duration;
 use serenity::{client::Context, model::channel::Message};
 use structopt::{clap, StructOpt};
 use strum::VariantNames;
@@ -75,49 +73,51 @@ impl Command {
     }
 }
 
-async fn status_command(ctx: &Context, msg: Message) -> anyhow::Result<()> {
-    let data = ctx.data.read().await;
-    let shards = data.get_userdata::<ShardMetadata>()?;
-    let own_shard = shards
-        .get(&ctx.shard_id)
-        .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
+async fn status_command(_ctx: &Context, _msg: Message) -> anyhow::Result<()> {
+    unimplemented!()
 
-    let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
-    let bot_uptime = (Utc::now() - *data.get_userdata::<BotUptime>()?).round_to_seconds();
-    let total_guilds: usize = shards.values().map(|shard| shard.guilds).sum();
+    // let data = ctx.data.read().await;
+    // let shards = data.get_userdata::<ShardMetadata>()?;
+    // let own_shard = shards
+    //     .get(&ctx.shard_id)
+    //     .ok_or(InternalError::MissingOwnShardMetadata(ctx.shard_id))?;
 
-    super::respond_embed(ctx, &msg, |e| {
-        e.field(
-            "Shard / total shards",
-            format!("{}/{}", own_shard.id + 1, shards.len(),),
-            true,
-        );
-        e.field(
-            "Guilds / total guilds",
-            format!("{}/{}", own_shard.guilds, total_guilds),
-            true,
-        );
-        e.field(
-            "Bot / shard uptime",
-            format!("{} / {}", format_duration(bot_uptime), format_duration(own_uptime)),
-            false,
-        );
+    // let own_uptime = own_shard.last_connected.elapsed().round_to_seconds();
+    // let bot_uptime = (Utc::now() - *data.get_userdata::<BotUptime>()?).round_to_seconds();
+    // let total_guilds: usize = shards.values().map(|shard| shard.guilds).sum();
 
-        let mut latencies = String::new();
-        if let Some(latency) = own_shard.latency {
-            latencies += &format!("GW: {} ms\n", latency.as_millis());
-        } else {
-            latencies += "GW: n/a\n"
-        }
+    // super::respond_embed(ctx, &msg, |e| {
+    //     e.field(
+    //         "Shard / total shards",
+    //         format!("{}/{}", own_shard.id + 1, shards.len(),),
+    //         true,
+    //     );
+    //     e.field(
+    //         "Guilds / total guilds",
+    //         format!("{}/{}", own_shard.guilds, total_guilds),
+    //         true,
+    //     );
+    //     e.field(
+    //         "Bot / shard uptime",
+    //         format!("{} / {}", format_duration(bot_uptime), format_duration(own_uptime)),
+    //         false,
+    //     );
 
-        e.field("Latencies", latencies, false);
+    //     let mut latencies = String::new();
+    //     if let Some(latency) = own_shard.latency {
+    //         latencies += &format!("GW: {} ms\n", latency.as_millis());
+    //     } else {
+    //         latencies += "GW: n/a\n"
+    //     }
 
-        // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
-        // which will construct the timestamp string out of it.`, but serenity itself implements the
-        // conversion only for references to datetimes, not datetimes directly
-        e.timestamp(&Utc::now())
-    })
-    .await
+    //     e.field("Latencies", latencies, false);
+
+    //     // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
+    //     // which will construct the timestamp string out of it.`, but serenity itself implements the
+    //     // conversion only for references to datetimes, not datetimes directly
+    //     e.timestamp(&Utc::now())
+    // })
+    // .await
 }
 
 async fn module_command(

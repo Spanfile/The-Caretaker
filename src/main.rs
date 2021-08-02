@@ -39,16 +39,10 @@ use diesel::{
 };
 use framework::CaretakerFramework;
 use log::*;
-use module::{cache::ModuleCache};
+use module::cache::ModuleCache;
 use serenity::{http::Http, model::prelude::*, prelude::*, Client};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tokio::{
-    sync::{broadcast, mpsc},
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::{broadcast, mpsc};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -57,7 +51,7 @@ struct ShardMetadata {
     id: u64,
     guilds: usize,
     latency: Option<Duration>,
-    last_connected: Instant,
+    last_connected: DateTime<Utc>,
 }
 
 impl TypeMapKey for ShardMetadata {
@@ -140,6 +134,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
     let framework = CaretakerFramework::new(msg_tx);
     let client = Client::builder(token)
         .event_handler(handler::Handler)
+        .application_id(appinfo.id.0) // this ID is technically the bot user ID but it also works as the application ID
         .framework(framework)
         // specifying a stricter set of intents than literally all of them seems to disallow serenity's cache from
         // functioning, which in turn breaks a lot of other things

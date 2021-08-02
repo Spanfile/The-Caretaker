@@ -1,8 +1,17 @@
-use std::{sync::Arc, time::{Duration, Instant}};
+use crate::{
+    error::InternalError,
+    ext::UserdataExt,
+    matcher::MatcherResponse,
+    module::{action::Action, cache::ModuleCache},
+    DbPool, ShardMetadata,
+};
 use log::*;
-use serenity::{CacheAndHttp, Client, model::channel::Message};
+use serenity::{model::channel::Message, CacheAndHttp, Client};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{sync::mpsc, time};
-use crate::{DbPool, ShardMetadata, error::InternalError, ext::UserdataExt, matcher::MatcherResponse, module::{action::Action, cache::ModuleCache}};
 
 pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
     debug!("Spawning shard latency update ticker...");

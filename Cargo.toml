@@ -1,8 +1,6 @@
-cargo-features = ["edition2021"]
-
 [package]
 authors = ["Spanfile <spansdev@gmail.com>"]
-edition = "2021"
+edition = "2018"
 name = "the-caretaker"
 version = "0.1.0"
 
@@ -23,7 +21,7 @@ humantime = "2.1.0"
 log = "0.4.14"
 nilsimsa = "0.2.0"
 serde = {version = "1.0.127", features = ["derive"]}
-serenity = {version = "0.10.8", default-features = false, features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "utils", "rustls_backend"]}
+serenity = {version = "0.10.8", default-features = false, features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "utils", "rustls_backend", "unstable_discord_api"]}
 shtring = "0.1.0"
 structopt = {version = "0.3.22", default-features = false}
 strum = {version = "0.21.0", features = ["derive"]}
@@ -32,5 +30,5 @@ tokio = {version = "1.9.0", features = ["macros", "signal", "sync", "rt-multi-th
 url = "2.2.2"
 
 # TODO: workaround. https://github.com/rust-lang/cargo/issues/9450
-[build-dependencies]
-diesel = {version = "1.4.7", features = ["postgres", "r2d2"]}
+# [build-dependencies]
+# diesel = {version = "1.4.7", features = ["postgres", "r2d2"]}
