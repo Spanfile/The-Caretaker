@@ -144,7 +144,7 @@ where
         };
 
         let start = Instant::now();
-        let result = self.matcher.is_match(settings, &msg).await;
+        let result = self.matcher.is_match(settings, msg).await;
         debug!(
             "{}: returned match result {:?} in {:?}",
             self.kind,

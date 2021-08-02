@@ -16,6 +16,7 @@ mod error;
 mod ext;
 mod framework;
 mod guild_settings;
+mod handler;
 mod logging;
 mod matcher;
 mod models;
@@ -41,10 +42,7 @@ use framework::CaretakerFramework;
 use log::*;
 use matcher::MatcherResponse;
 use module::{action::Action, cache::ModuleCache};
-use serenity::{
-    async_trait, client::bridge::gateway::event::ShardStageUpdateEvent, gateway::ConnectionStage, http::Http,
-    model::prelude::*, prelude::*, CacheAndHttp, Client,
-};
+use serenity::{http::Http, model::prelude::*, prelude::*, CacheAndHttp, Client};
 use std::{
     collections::HashMap,
     sync::Arc,
@@ -78,94 +76,6 @@ impl TypeMapKey for DbPool {
 struct BotUptime {}
 impl TypeMapKey for BotUptime {
     type Value = DateTime<Utc>;
-}
-
-struct Handler;
-#[async_trait]
-impl EventHandler for Handler {
-    async fn ready(&self, ctx: Context, ready: Ready) {
-        debug!("{:#?}", ready);
-        if let Some(s) = ready.shard {
-            let (shard, shards) = (s[0], s[1]);
-            info!(
-                "Shard {}/{} ready! # of guilds: {}. Session ID: {}. Connected as {}",
-                shard + 1,
-                shards,
-                ready.guilds.len(),
-                ready.session_id,
-                ready.user.tag()
-            );
-
-            self.set_info_activity(&ctx, shard, shards).await;
-            self.insert_shard_metadata(&ctx, shard, ready.guilds.len()).await;
-        } else {
-            error!("Session ready, but shard was None");
-        }
-    }
-
-    async fn resume(&self, ctx: Context, _: ResumedEvent) {
-        debug!("Shard {}: resumed", ctx.shard_id);
-    }
-
-    async fn shard_stage_update(&self, ctx: Context, update: ShardStageUpdateEvent) {
-        info!(
-            "Shard {}: transitioned from {} to {}",
-            update.shard_id, update.old, update.new
-        );
-
-        if let (ConnectionStage::Resuming, ConnectionStage::Connected) = (update.old, update.new) {
-            info!("Shard {}: reconnected, resetting last connected time", update.shard_id);
-            self.reset_shard_last_connected(&ctx, update.shard_id.0).await;
-        }
-    }
-
-    async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
-        debug!("Shard {}: cache ready. # of guilds: {}", ctx.shard_id, guilds.len());
-        debug!("{:?}", guilds);
-    }
-}
-
-impl Handler {
-    async fn set_info_activity(&self, ctx: &Context, shard: u64, shards: u64) {
-        ctx.set_activity(Activity::playing(&format!(
-            "{} [{}] [{}/{}]",
-            framework::DEFAULT_COMMAND_PREFIX,
-            VERSION,
-            shard + 1,
-            shards
-        )))
-        .await;
-    }
-
-    async fn insert_shard_metadata(&self, ctx: &Context, shard: u64, guilds: usize) {
-        let mut data = ctx.data.write().await;
-        if let Some(shard_meta) = data.get_mut::<ShardMetadata>() {
-            shard_meta.insert(
-                shard,
-                ShardMetadata {
-                    id: shard,
-                    guilds,
-                    latency: None,
-                    last_connected: Instant::now(),
-                },
-            );
-        } else {
-            error!("No shard collection in context userdata");
-        }
-    }
-
-    async fn reset_shard_last_connected(&self, ctx: &Context, shard: u64) {
-        let mut data = ctx.data.write().await;
-        if let Some(meta_collection) = data.get_mut::<ShardMetadata>() {
-            if let Some(shard_meta) = meta_collection.get_mut(&shard) {
-                shard_meta.last_connected = Instant::now();
-            } else {
-                error!("No shard metadata for shard {}", shard);
-            }
-        } else {
-            error!("No shard collection in context userdata");
-        }
-    }
 }
 
 #[tokio::main]
@@ -232,7 +142,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
 
     let framework = CaretakerFramework::new(msg_tx);
     let client = Client::builder(token)
-        .event_handler(Handler)
+        .event_handler(handler::Handler)
         .framework(framework)
         // specifying a stricter set of intents than literally all of them seems to disallow serenity's cache from
         // functioning, which in turn breaks a lot of other things

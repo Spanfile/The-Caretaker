@@ -5,26 +5,26 @@ name = "the-caretaker"
 version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0.40"
+anyhow = "1.0.42"
 chrono = "0.4.19"
 circular-queue = "0.2.6"
-diesel = {version = "1.4.6", features = ["postgres", "r2d2"]}
+diesel = {version = "1.4.7", features = ["postgres", "r2d2"]}
 diesel-derive-enum = {version = "1.1.1", features = ["postgres"]}
 diesel_migrations = "1.4.0"
 dotenv = "0.15.0"
 dynfmt = {version = "0.1.5", default-features = false, features = ["curly"]}
-enum_dispatch = "0.3.5"
+enum_dispatch = "0.3.7"
 envy = "0.4.2"
-erased-serde = "0.3.13"
+erased-serde = "0.3.16"
 fern = {version = "0.6.0", features = ["colored"]}
 humantime = "2.1.0"
 log = "0.4.14"
 nilsimsa = "0.2.0"
-serde = {version = "1.0.125", features = ["derive"]}
-serenity = {version = "0.10.5", default-features = false, features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "utils", "rustls_backend"]}
+serde = {version = "1.0.127", features = ["derive"]}
+serenity = {version = "0.10.8", default-features = false, features = ["builder", "cache", "client", "framework", "gateway", "http", "model", "utils", "rustls_backend"]}
 shtring = "0.1.0"
-structopt = {version = "0.3.21", default-features = false}
-strum = {version = "0.20.0", features = ["derive"]}
-thiserror = "1.0.24"
-tokio = {version = "1.5.0", features = ["macros", "signal", "sync", "rt-multi-thread"]}
-url = "2.2.1"
+structopt = {version = "0.3.22", default-features = false}
+strum = {version = "0.21.0", features = ["derive"]}
+thiserror = "1.0.26"
+tokio = {version = "1.9.0", features = ["macros", "signal", "sync", "rt-multi-thread"]}
+url = "2.2.2"

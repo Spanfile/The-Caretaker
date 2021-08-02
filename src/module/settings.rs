@@ -21,29 +21,27 @@ pub trait Settings {
 #[enum_dispatch(Settings)]
 #[derive(Debug)]
 pub enum ModuleSettings {
-    MassPingSettings,
-    CrosspostSettings,
-    EmojiSpamSettings,
-    MentionSpamSettings,
-    SelfbotSettings,
-    InviteLinkSettings,
-    ChannelActivitySettings,
-    UserActivitySettings,
+    MassPing(MassPingSettings),
+    Crosspost(CrosspostSettings),
+    EmojiSpam(EmojiSpamSettings),
+    MentionSpam(MentionSpamSettings),
+    Selfbot(SelfbotSettings),
+    InviteLink(InviteLinkSettings),
+    ChannelActivity(ChannelActivitySettings),
+    UserActivity(UserActivitySettings),
 }
 
 impl ModuleSettings {
     pub fn from_db_rows(module: ModuleKind, rows: &[models::ModuleSetting]) -> anyhow::Result<Self> {
         match module {
-            ModuleKind::MassPing => Ok(Self::MassPingSettings(MassPingSettings::from_db_rows(rows)?)),
-            ModuleKind::Crosspost => Ok(Self::CrosspostSettings(CrosspostSettings::from_db_rows(rows)?)),
-            ModuleKind::EmojiSpam => Ok(Self::EmojiSpamSettings(EmojiSpamSettings::from_db_rows(rows)?)),
-            ModuleKind::MentionSpam => Ok(Self::MentionSpamSettings(MentionSpamSettings::from_db_rows(rows)?)),
-            ModuleKind::Selfbot => Ok(Self::SelfbotSettings(SelfbotSettings::from_db_rows(rows)?)),
-            ModuleKind::InviteLink => Ok(Self::InviteLinkSettings(InviteLinkSettings::from_db_rows(rows)?)),
-            ModuleKind::ChannelActivity => Ok(Self::ChannelActivitySettings(ChannelActivitySettings::from_db_rows(
-                rows,
-            )?)),
-            ModuleKind::UserActivity => Ok(Self::UserActivitySettings(UserActivitySettings::from_db_rows(rows)?)),
+            ModuleKind::MassPing => Ok(Self::MassPing(MassPingSettings::from_db_rows(rows)?)),
+            ModuleKind::Crosspost => Ok(Self::Crosspost(CrosspostSettings::from_db_rows(rows)?)),
+            ModuleKind::EmojiSpam => Ok(Self::EmojiSpam(EmojiSpamSettings::from_db_rows(rows)?)),
+            ModuleKind::MentionSpam => Ok(Self::MentionSpam(MentionSpamSettings::from_db_rows(rows)?)),
+            ModuleKind::Selfbot => Ok(Self::Selfbot(SelfbotSettings::from_db_rows(rows)?)),
+            ModuleKind::InviteLink => Ok(Self::InviteLink(InviteLinkSettings::from_db_rows(rows)?)),
+            ModuleKind::ChannelActivity => Ok(Self::ChannelActivity(ChannelActivitySettings::from_db_rows(rows)?)),
+            ModuleKind::UserActivity => Ok(Self::UserActivity(UserActivitySettings::from_db_rows(rows)?)),
         }
     }
 }

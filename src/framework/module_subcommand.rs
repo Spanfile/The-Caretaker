@@ -225,7 +225,7 @@ async fn set_setting(name: &str, value: &str, module: Module, ctx: &Context, msg
     let db = data.get_userdata::<DbPool>()?.get()?;
     let mut settings = module.get_settings(&db)?;
 
-    settings.set(&name, &value)?;
+    settings.set(name, value)?;
     module.set_settings(&settings, &db)?;
     react_success(ctx, &msg).await
 }
@@ -235,7 +235,7 @@ async fn reset_setting(name: &str, module: Module, ctx: &Context, msg: Message) 
     let db = data.get_userdata::<DbPool>()?.get()?;
     let mut settings = module.get_settings(&db)?;
 
-    settings.reset(&name)?;
+    settings.reset(name)?;
     module.set_settings(&settings, &db)?;
     react_success(ctx, &msg).await
 }
