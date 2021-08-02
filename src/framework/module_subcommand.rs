@@ -240,14 +240,14 @@ async fn reset_setting(name: &str, module: Module, ctx: &Context, msg: Message) 
     react_success(ctx, &msg).await
 }
 
-async fn get_exclusions(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+async fn get_exclusions(_module: Module, _ctx: &Context, _msg: Message) -> anyhow::Result<()> {
     todo!()
 }
 
-async fn set_exclusion(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+async fn set_exclusion(_module: Module, _ctx: &Context, _msg: Message) -> anyhow::Result<()> {
     todo!()
 }
 
-async fn remove_exclusion(module: Module, ctx: &Context, msg: Message) -> anyhow::Result<()> {
+async fn remove_exclusion(_module: Module, _ctx: &Context, _msg: Message) -> anyhow::Result<()> {
     todo!()
 }

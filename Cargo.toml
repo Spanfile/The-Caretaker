@@ -1,6 +1,8 @@
+cargo-features = ["edition2021"]
+
 [package]
 authors = ["Spanfile <spansdev@gmail.com>"]
-edition = "2018"
+edition = "2021"
 name = "the-caretaker"
 version = "0.1.0"
 
@@ -28,3 +30,7 @@ strum = {version = "0.21.0", features = ["derive"]}
 thiserror = "1.0.26"
 tokio = {version = "1.9.0", features = ["macros", "signal", "sync", "rt-multi-thread"]}
 url = "2.2.2"
+
+# TODO: workaround. https://github.com/rust-lang/cargo/issues/9450
+[build-dependencies]
+diesel = {version = "1.4.7", features = ["postgres", "r2d2"]}
