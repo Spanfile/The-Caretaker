@@ -51,16 +51,16 @@ macro_rules! optional_command_option {
             }
         } else {
             Ok(None)
-        }?
+        }
     };
 }
 
 #[macro_export]
 macro_rules! command_option {
     ($options:ident, $index:literal, $value_type:ident) => {
-        $crate::optional_command_option!($options, $index, $value_type).ok_or_else(|| {
+        $crate::optional_command_option!($options, $index, $value_type)?.ok_or_else(|| {
             $crate::error::InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument"))
-        })?
+        })
     };
 }
 

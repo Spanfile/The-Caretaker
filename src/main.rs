@@ -131,6 +131,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
         appinfo.owner.id
     );
 
+    debug!("Initialising handler and client...");
     let handler = Handler::new(msg_tx);
     let client = Client::builder(token)
         .event_handler(handler)

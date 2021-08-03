@@ -59,7 +59,7 @@ impl EventHandler for Handler {
 
     async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
         debug!("Shard {}: cache ready. # of guilds: {}", ctx.shard_id, guilds.len());
-        debug!("{:?}", guilds);
+        trace!("{:?}", guilds);
     }
 
     async fn message(&self, _ctx: Context, msg: Message) {

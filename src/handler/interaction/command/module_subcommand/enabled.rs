@@ -62,7 +62,7 @@ impl SubcommandTrait for EnabledSubcommand {
             }
             EnabledSubcommand::Set => {
                 let mut module = resolve_module(ctx, interact, cmd_options).await?;
-                let enabled = *command_option!(cmd_options, 1, Boolean);
+                let enabled = *command_option!(cmd_options, 1, Boolean)?;
 
                 let data = ctx.data.read().await;
                 let db = data.get_userdata::<DbPool>()?.get()?;
