@@ -9,7 +9,6 @@ use crate::{
     },
     optional_command_option, DbPool,
 };
-use log::*;
 use serenity::{
     async_trait,
     client::Context,
@@ -79,11 +78,6 @@ async fn add_action(
 
     let message = optional_command_option!(cmd_options, 2, String)?.map(|val| val.as_str());
     let in_channel = optional_command_option!(cmd_options, 3, Channel)?.map(|ch| ch.id);
-
-    debug!(
-        "Adding new action for module {:?}: {}, {:?}, {:?}",
-        module, action_kind, message, in_channel
-    );
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
