@@ -17,6 +17,7 @@ pub enum Command {
     Status,
     Fail,
     Success,
+    Module,
 }
 
 impl Command {
@@ -30,6 +31,7 @@ impl Command {
             Command::Fail => Err(InternalError::DeliberateError.into()),
             Command::Success => super::respond_success(ctx, interact).await,
             Command::Status => status_command(ctx, interact).await,
+            Command::Module => todo!(),
         }
     }
 }
