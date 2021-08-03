@@ -1,9 +1,19 @@
-use super::{enabled_string, resolve_optional_module, respond, respond_embed, SubcommandTrait};
-use crate::{error::ArgumentError, ext::UserdataExt, module::Module, DbPool};
+use super::{
+    enabled_string, resolve_module, resolve_optional_module, respond, respond_embed, respond_success, SubcommandTrait,
+};
+use crate::{
+    command_option,
+    error::{ArgumentError, InternalError},
+    ext::UserdataExt,
+    module::{cache::ModuleCache, Module},
+    DbPool,
+};
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionDataOption, Interaction},
+    model::interactions::{
+        ApplicationCommandInteractionDataOption, ApplicationCommandInteractionDataOptionValue, Interaction,
+    },
 };
 use strum::EnumString;
 
@@ -52,7 +62,19 @@ impl SubcommandTrait for EnabledSubcommand {
                     .await
                 }
             }
-            EnabledSubcommand::Set => todo!(),
+            EnabledSubcommand::Set => {
+                let mut module = resolve_module(ctx, interact, cmd_options).await?;
+                let enabled = *command_option!(cmd_options, 1, Boolean);
+
+                let data = ctx.data.read().await;
+                let db = data.get_userdata::<DbPool>()?.get()?;
+                let module_cache = data.get_userdata::<ModuleCache>()?;
+
+                module.set_enabled(enabled, &db)?;
+                module_cache.update(module).await?;
+
+                respond_success(ctx, interact).await
+            }
         }
     }
 }

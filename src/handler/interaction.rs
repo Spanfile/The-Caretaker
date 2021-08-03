@@ -32,7 +32,7 @@ pub async fn build_commands(ctx: &Context) {
     })
     .await
     {
-        Ok(cmds) => debug!("{:#?}", cmds),
+        Ok(cmds) => trace!("{:#?}", cmds),
         Err(e) => error!("Registering commands for shard {} failed: {:?}", ctx.shard_id, e),
     }
 }

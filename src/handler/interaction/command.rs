@@ -36,6 +36,23 @@ trait SubcommandTrait {
     ) -> anyhow::Result<()>;
 }
 
+#[macro_export]
+macro_rules! command_option {
+    ($options:ident, $index:literal, $value_type:ident) => {
+        $options
+            .get($index)
+            .and_then(|opt| opt.resolved.as_ref())
+            .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument")))
+            .and_then(|opt| match opt {
+                ApplicationCommandInteractionDataOptionValue::$value_type(value) => Ok(value),
+                value => Err(InternalError::ImpossibleCase(format!(
+                    "parsing subcommand failed: invalid value: {:?}",
+                    value
+                ))),
+            })?
+    };
+}
+
 impl Command {
     pub async fn run(
         self,
@@ -63,17 +80,11 @@ where
 {
     let (subcommand, sub) = cmd_options
         .first()
-        .ok_or_else(|| {
-            InternalError::ImpossibleCase(String::from(
-                "parsing module enabled subcommand failed: missing subcommand",
-            ))
-        })
+        .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing subcommand")))
         .and_then(|sub| {
             S::from_str(sub.name.as_ref())
                 .map(|subcommand| (subcommand, sub))
-                .map_err(|e| {
-                    InternalError::ImpossibleCase(format!("parsing module enabled subcommand failed: {:?}", e))
-                })
+                .map_err(|e| InternalError::ImpossibleCase(format!("parsing subcommand failed: {:?}", e)))
         })?;
     subcommand.run(ctx, interact, &sub.options).await
 }
