@@ -1,9 +1,10 @@
 use crate::{
     error::InternalError,
     ext::UserdataExt,
+    latency_counter::LatencyCounter,
     matcher::MatcherResponse,
     module::{action::Action, cache::ModuleCache},
-    DbPool, ShardMetadata,
+    DbPool,
 };
 use log::*;
 use serenity::{model::channel::Message, CacheAndHttp, Client};
@@ -26,26 +27,21 @@ pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
             let manager = shard_manager.lock().await;
             let runners = manager.runners.lock().await;
             let mut data = client_data.write().await;
-            let shard_meta_collection = if let Some(sm) = data.get_mut::<ShardMetadata>() {
-                sm
+
+            let latency_counter = if let Some(counter) = data.get_mut::<LatencyCounter>() {
+                counter
             } else {
-                error!("No shard collection in client userdata");
+                error!("No latency counter in client userdata");
                 continue;
             };
 
             for (id, runner) in runners.iter() {
                 debug!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
 
-                if let Some(meta) = shard_meta_collection.get_mut(&id.0) {
-                    match (meta.latency, runner.latency) {
-                        (_, Some(latency)) => meta.latency = Some(latency),
-                        (Some(prev), None) => {
-                            warn!("Missing latency update for shard {} (previous latency {:?})", id, prev)
-                        }
-                        (None, None) => warn!("Missing first latency update for shard {}", id),
-                    }
+                if let Some(latency) = runner.latency {
+                    latency_counter.tick_gateway(latency).await;
                 } else {
-                    error!("No metadata object for shard {} found", id);
+                    warn!("Missed latency update for shard {}", id);
                 }
             }
         }
@@ -69,6 +65,7 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
     let data = client.data.read().await;
     let module_cache = data.get_userdata::<ModuleCache>()?.clone();
     let db_pool = data.get_userdata::<DbPool>()?.clone();
+    let latency = data.get_userdata::<LatencyCounter>()?.clone();
     let cache_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {
@@ -112,7 +109,7 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
             };
 
             for action in actions {
-                spawn_action_runner(action, Arc::clone(&cache_http), Arc::clone(&msg));
+                spawn_action_runner(action, Arc::clone(&cache_http), Arc::clone(&msg), latency.clone());
             }
         }
     });
@@ -120,7 +117,12 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
     Ok(())
 }
 
-fn spawn_action_runner(action: Action<'static>, cache_http: Arc<CacheAndHttp>, msg: Arc<Message>) {
+fn spawn_action_runner(
+    action: Action<'static>,
+    cache_http: Arc<CacheAndHttp>,
+    msg: Arc<Message>,
+    latency: LatencyCounter,
+) {
     tokio::spawn(async move {
         let action_dbg_display = format!("{:?}", action);
         let start = Instant::now();
@@ -139,5 +141,7 @@ fn spawn_action_runner(action: Action<'static>, cache_http: Arc<CacheAndHttp>, m
             msg.id,
             start.elapsed()
         );
+
+        latency.tick_action(start.elapsed()).await;
     });
 }

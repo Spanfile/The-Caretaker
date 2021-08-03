@@ -16,6 +16,7 @@ mod error;
 mod ext;
 mod guild_settings;
 mod handler;
+mod latency_counter;
 mod logging;
 mod matcher;
 mod models;
@@ -37,19 +38,21 @@ use diesel::{
     r2d2::{ConnectionManager, Pool, PooledConnection},
 };
 use handler::Handler;
+use latency_counter::LatencyCounter;
 use log::*;
 use module::cache::ModuleCache;
 use serenity::{http::Http, model::prelude::*, prelude::*, Client};
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{broadcast, mpsc};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+type DbConn = PooledConnection<ConnectionManager<PgConnection>>;
 
 #[derive(Debug)]
 struct ShardMetadata {
     id: u64,
     guilds: usize,
-    latency: Option<Duration>,
     last_connected: DateTime<Utc>,
 }
 
@@ -57,7 +60,6 @@ impl TypeMapKey for ShardMetadata {
     type Value = HashMap<u64, ShardMetadata>;
 }
 
-type DbConn = PooledConnection<ConnectionManager<PgConnection>>;
 struct DbPool {}
 impl TypeMapKey for DbPool {
     type Value = Pool<ConnectionManager<PgConnection>>;
@@ -156,6 +158,7 @@ async fn populate_userdata(
     data.insert::<ShardMetadata>(HashMap::default());
     data.insert::<DbPool>(db_pool);
     data.insert::<BotUptime>(start_time);
+    data.insert::<LatencyCounter>(LatencyCounter::new());
 
     Ok(())
 }

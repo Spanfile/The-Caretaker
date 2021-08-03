@@ -1,7 +1,6 @@
-use chrono::Utc;
 use log::*;
 use serenity::model::channel::{Message, MessageType};
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub async fn process(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
@@ -10,19 +9,9 @@ pub async fn process(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
         return;
     }
 
-    debug!("{:?}", msg);
-    debug!(
-        "Message processing called {}ms later from message timestamp ({})",
-        (Utc::now() - msg.timestamp).num_milliseconds(),
-        msg.timestamp
-    );
-
-    let start = Instant::now();
     if let Err(e) = process_message(msg, msg_tx).await {
         error!("Message processing failed: {}", e)
     }
-
-    debug!("Message processed in {:?}", start.elapsed());
 }
 
 async fn process_message(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) -> anyhow::Result<()> {

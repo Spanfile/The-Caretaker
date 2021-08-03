@@ -1,6 +1,5 @@
-use crate::DbConn;
-
 use super::{Module, ModuleKind};
+use crate::DbConn;
 use log::*;
 use serenity::{model::id::GuildId, prelude::TypeMapKey};
 use std::{

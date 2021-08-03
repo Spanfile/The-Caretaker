@@ -1,7 +1,7 @@
 mod interaction;
 mod message;
 
-use crate::{ShardMetadata, VERSION};
+use crate::{ext::UserdataExt, latency_counter::LatencyCounter, ShardMetadata, VERSION};
 use chrono::Utc;
 use log::*;
 use serenity::{
@@ -10,7 +10,7 @@ use serenity::{
     gateway::ConnectionStage,
     model::prelude::*,
 };
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 
 pub struct Handler {
@@ -62,8 +62,21 @@ impl EventHandler for Handler {
         trace!("{:?}", guilds);
     }
 
-    async fn message(&self, _ctx: Context, msg: Message) {
+    async fn message(&self, ctx: Context, msg: Message) {
+        let delay = (Utc::now() - msg.timestamp).num_milliseconds();
+        debug!("{:?}", msg);
+        debug!(
+            "Message handler called {}ms later from message timestamp ({})",
+            delay, msg.timestamp
+        );
+
         message::process(msg, &self.msg_tx).await;
+
+        let data = ctx.data.read().await;
+        match data.get_userdata::<LatencyCounter>() {
+            Ok(latency) => latency.tick_message(Duration::from_millis(delay as u64)).await,
+            Err(e) => error!("Failed to tick message handler latency: {:?}", e),
+        }
     }
 
     async fn interaction_create(&self, ctx: Context, interact: Interaction) {
@@ -89,7 +102,6 @@ impl Handler {
                 ShardMetadata {
                     id: shard,
                     guilds,
-                    latency: None,
                     last_connected: Utc::now(),
                 },
             );
