@@ -48,14 +48,12 @@ pub struct NewModuleSetting<'a> {
 #[derive(Queryable, Debug)]
 pub struct GuildSettings {
     pub guild: i64,
-    pub prefix: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]
 #[table_name = "guild_settings"]
 // this is required so it is possible to set the Option fields to None in an ON CONFLICT DO UPDATE
 #[changeset_options(treat_none_as_null = "true")]
-pub struct NewGuildSettings<'a> {
+pub struct NewGuildSettings {
     pub guild: i64,
-    pub prefix: Option<&'a str>,
 }

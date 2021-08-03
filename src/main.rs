@@ -14,7 +14,6 @@ extern crate diesel_migrations;
 mod config;
 mod error;
 mod ext;
-mod framework;
 mod guild_settings;
 mod handler;
 mod logging;
@@ -37,7 +36,7 @@ use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
 };
-use framework::CaretakerFramework;
+use handler::Handler;
 use log::*;
 use module::cache::ModuleCache;
 use serenity::{http::Http, model::prelude::*, prelude::*, Client};
@@ -77,15 +76,10 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::load()?;
     logging::setup_logging(&config)?;
 
-    info!("Starting Caretaker version {}", VERSION);
+    info!("Starting Caretaker version {} at {}", VERSION, start_time);
     debug!("{:#?}", config);
 
     let db_pool = build_db_pool(&config.database_url)?;
-    info!(
-        "Database connection established. Total connections: {}",
-        db_pool.max_size()
-    );
-
     let module_cache = ModuleCache::populate_from_db(&db_pool.get()?)?;
 
     let (msg_tx, _) = broadcast::channel(64);
@@ -113,7 +107,13 @@ fn build_db_pool(url: &str) -> anyhow::Result<Pool<ConnectionManager<PgConnectio
 
     let builder = Pool::builder();
     debug!("{:#?}", builder);
-    Ok(builder.build(ConnectionManager::new(url))?)
+
+    let pool = builder.build(ConnectionManager::new(url))?;
+    info!(
+        "Database connection established. Total connections: {}",
+        pool.max_size()
+    );
+    Ok(pool)
 }
 
 async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Message>>) -> anyhow::Result<Client> {
@@ -131,11 +131,10 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
         appinfo.owner.id
     );
 
-    let framework = CaretakerFramework::new(msg_tx);
+    let handler = Handler::new(msg_tx);
     let client = Client::builder(token)
-        .event_handler(handler::Handler)
+        .event_handler(handler)
         .application_id(appinfo.id.0) // this ID is technically the bot user ID but it also works as the application ID
-        .framework(framework)
         // specifying a stricter set of intents than literally all of them seems to disallow serenity's cache from
         // functioning, which in turn breaks a lot of other things
         //.intents(GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES)

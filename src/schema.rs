@@ -18,7 +18,6 @@ table! {
 
     guild_settings (guild) {
         guild -> Int8,
-        prefix -> Nullable<Text>,
     }
 }
 
@@ -57,4 +56,10 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(actions, guild_settings, module_exclusions, module_settings, modules,);
+allow_tables_to_appear_in_same_query!(
+    actions,
+    guild_settings,
+    module_exclusions,
+    module_settings,
+    modules,
+);

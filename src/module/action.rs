@@ -86,7 +86,7 @@ impl<'a> Action<'a> {
                     Some(notify_channel) => notify_channel,
                     None => msg.channel_id,
                 }
-                .send_message(&cache_http.http, |m| m.content(formatted))
+                .send_message(&cache_http.http, |m| m.reference_message(msg).content(formatted))
                 .await?;
             }
         }

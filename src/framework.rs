@@ -202,9 +202,10 @@ fn is_regular(msg: &Message) -> bool {
 }
 
 async fn get_guild_prefix(ctx: &Context, guild: GuildId) -> anyhow::Result<String> {
-    let data = ctx.data.read().await;
-    let db = data.get_userdata::<DbPool>()?.get()?;
+    unimplemented!()
+    // let data = ctx.data.read().await;
+    // let db = data.get_userdata::<DbPool>()?.get()?;
 
-    let settings = GuildSettings::get_for_guild(guild, &db)?;
-    Ok(settings.get_prefix_or_default())
+    // let settings = GuildSettings::get_for_guild(guild, &db)?;
+    // Ok(settings.get_prefix_or_default())
 }

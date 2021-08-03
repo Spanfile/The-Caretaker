@@ -158,12 +158,13 @@ async fn module_command(
 }
 
 async fn update_guild_prefix_command(ctx: &Context, msg: Message, pfx: Option<String>) -> anyhow::Result<()> {
-    let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
-    let data = ctx.data.read().await;
-    let db = data.get_userdata::<DbPool>()?.get()?;
+    unimplemented!()
+    // let guild_id = msg.guild_id.ok_or(InternalError::MissingGuildID)?;
+    // let data = ctx.data.read().await;
+    // let db = data.get_userdata::<DbPool>()?.get()?;
 
-    let mut settings = GuildSettings::get_for_guild(guild_id, &db)?;
-    settings.set_guild_prefix(pfx, &db)?;
+    // let mut settings = GuildSettings::get_for_guild(guild_id, &db)?;
+    // settings.set_guild_prefix(pfx, &db)?;
 
-    super::react_success(ctx, &msg).await
+    // super::react_success(ctx, &msg).await
 }
