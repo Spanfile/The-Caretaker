@@ -24,7 +24,9 @@ pub enum InternalError {
 #[derive(Error, Debug)]
 pub enum ArgumentError {
     #[error("The index {0} is out of range")]
-    IndexOutOfRange(usize),
+    UsizeOutOfRange(usize),
+    #[error("The index {0} is out of range")]
+    I64OutOfRange(i64),
     #[error("That command cannot be used in my DMs")]
     NotSupportedInDM,
     #[error("The channel <#{0}> is not in this guild")]

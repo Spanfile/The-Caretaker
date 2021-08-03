@@ -37,19 +37,30 @@ trait SubcommandTrait {
 }
 
 #[macro_export]
-macro_rules! command_option {
+macro_rules! optional_command_option {
     ($options:ident, $index:literal, $value_type:ident) => {
-        $options
-            .get($index)
-            .and_then(|opt| opt.resolved.as_ref())
-            .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument")))
-            .and_then(|opt| match opt {
-                ApplicationCommandInteractionDataOptionValue::$value_type(value) => Ok(value),
-                value => Err(InternalError::ImpossibleCase(format!(
+        if let Some(value) = $options.get($index).and_then(|opt| opt.resolved.as_ref()) {
+            match value {
+                ::serenity::model::interactions::ApplicationCommandInteractionDataOptionValue::$value_type(value) => {
+                    Ok(Some(value))
+                }
+                value => Err($crate::error::InternalError::ImpossibleCase(format!(
                     "parsing subcommand failed: invalid value: {:?}",
                     value
                 ))),
-            })?
+            }
+        } else {
+            Ok(None)
+        }?
+    };
+}
+
+#[macro_export]
+macro_rules! command_option {
+    ($options:ident, $index:literal, $value_type:ident) => {
+        $crate::optional_command_option!($options, $index, $value_type).ok_or_else(|| {
+            $crate::error::InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument"))
+        })?
     };
 }
 

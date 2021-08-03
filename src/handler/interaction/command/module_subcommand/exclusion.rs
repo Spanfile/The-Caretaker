@@ -18,9 +18,9 @@ pub enum ExclusionSubcommand {
 impl SubcommandTrait for ExclusionSubcommand {
     async fn run(
         self,
-        ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        _ctx: &Context,
+        _interact: &Interaction,
+        _cmd_options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
         match self {
             ExclusionSubcommand::Get => todo!(),

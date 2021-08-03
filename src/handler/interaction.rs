@@ -132,8 +132,8 @@ fn build_action_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cre
                     sub.kind(ApplicationCommandOptionType::String)
                         .name("action")
                         .description("The action to add")
-                        .add_string_choice("remove-message", "Remove message")
-                        .add_string_choice("notify", "Notify")
+                        .add_string_choice("Remove message", "remove-message")
+                        .add_string_choice("Notify", "notify")
                         .required(true)
                 })
                 .create_sub_option(|sub| {
@@ -152,6 +152,12 @@ fn build_action_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cre
                 .name("remove")
                 .description("Removes a given action from the module based on its index")
                 .create_sub_option(module_option(true))
+                .create_sub_option(|sub| {
+                    sub.kind(ApplicationCommandOptionType::Integer)
+                        .name("index")
+                        .description("The index of the action to remove")
+                        .required(true)
+                })
         })
 }
 

@@ -218,7 +218,7 @@ impl Module {
                     .and(actions::module.eq(self.kind)),
             )
             .load::<models::Action>(db)?;
-        let delete = actions.get(n).ok_or(ArgumentError::IndexOutOfRange(n))?;
+        let delete = actions.get(n).ok_or(ArgumentError::UsizeOutOfRange(n))?;
 
         // return the deleted row's ID but don't store it anywhere, because this way diesel will error if the delete
         // affected no rows

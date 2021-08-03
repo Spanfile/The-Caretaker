@@ -82,12 +82,23 @@ impl<'a> Action<'a> {
                     .format(message.as_ref(), build_format_args(msg))
                     .map_err(|e| ArgumentError::InvalidNotifyFormat(e.to_string()))?;
 
-                match self.channel {
-                    Some(notify_channel) => notify_channel,
-                    None => msg.channel_id,
-                }
-                .send_message(&cache_http.http, |m| m.reference_message(msg).content(formatted))
-                .await?;
+                // messages can only be replied to if they're in the same channel. in case the target channel is
+                // specified, don't reply to the offending message
+                let (channel, reply) = match self.channel {
+                    Some(notify_channel) => (notify_channel, false),
+                    None => (msg.channel_id, true),
+                };
+
+                channel
+                    .send_message(&cache_http.http, |m| {
+                        m.content(formatted);
+                        if reply {
+                            m.reference_message(msg)
+                        } else {
+                            m
+                        }
+                    })
+                    .await?;
             }
         }
 

@@ -3,7 +3,7 @@ use super::{
 };
 use crate::{
     command_option,
-    error::{ArgumentError, InternalError},
+    error::ArgumentError,
     ext::UserdataExt,
     module::{cache::ModuleCache, Module},
     DbPool,
@@ -11,9 +11,7 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{
-        ApplicationCommandInteractionDataOption, ApplicationCommandInteractionDataOptionValue, Interaction,
-    },
+    model::interactions::{ApplicationCommandInteractionDataOption, Interaction},
 };
 use strum::EnumString;
 
