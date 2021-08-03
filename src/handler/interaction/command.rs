@@ -1,3 +1,7 @@
+mod module_subcommand;
+
+use self::module_subcommand::ModuleSubcommand;
+use super::{enabled_string, respond, respond_embed, respond_success};
 use crate::{
     error::InternalError,
     ext::{DurationExt, UserdataExt},
@@ -6,9 +10,11 @@ use crate::{
 use chrono::Utc;
 use humantime::format_duration;
 use serenity::{
+    async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionData, Interaction},
+    model::interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
 };
+use std::str::FromStr;
 use strum::EnumString;
 
 #[derive(Debug, EnumString)]
@@ -20,20 +26,56 @@ pub enum Command {
     Module,
 }
 
+#[async_trait]
+trait SubcommandTrait {
+    async fn run(
+        self,
+        ctx: &Context,
+        interact: &Interaction,
+        cmd_options: &[ApplicationCommandInteractionDataOption],
+    ) -> anyhow::Result<()>;
+}
+
 impl Command {
     pub async fn run(
         self,
         ctx: &Context,
         interact: &Interaction,
-        _cmd: &ApplicationCommandInteractionData,
+        cmd: &ApplicationCommandInteractionData,
     ) -> anyhow::Result<()> {
         match self {
             Command::Fail => Err(InternalError::DeliberateError.into()),
             Command::Success => super::respond_success(ctx, interact).await,
             Command::Status => status_command(ctx, interact).await,
-            Command::Module => todo!(),
+            Command::Module => run_subcommand::<ModuleSubcommand>(ctx, interact, &cmd.options).await,
         }
     }
+}
+
+async fn run_subcommand<S>(
+    ctx: &Context,
+    interact: &Interaction,
+    cmd_options: &[ApplicationCommandInteractionDataOption],
+) -> anyhow::Result<()>
+where
+    S: SubcommandTrait + FromStr,
+    <S as FromStr>::Err: std::fmt::Debug,
+{
+    let (subcommand, sub) = cmd_options
+        .first()
+        .ok_or_else(|| {
+            InternalError::ImpossibleCase(String::from(
+                "parsing module enabled subcommand failed: missing subcommand",
+            ))
+        })
+        .and_then(|sub| {
+            S::from_str(sub.name.as_ref())
+                .map(|subcommand| (subcommand, sub))
+                .map_err(|e| {
+                    InternalError::ImpossibleCase(format!("parsing module enabled subcommand failed: {:?}", e))
+                })
+        })?;
+    subcommand.run(ctx, interact, &sub.options).await
 }
 
 async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {

@@ -37,19 +37,23 @@ pub async fn build_commands(ctx: &Context) {
     }
 }
 
-fn module_option(opt: &mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption {
-    opt.kind(ApplicationCommandOptionType::String)
-        .name("module")
-        .description("The module to edit")
-        .required(true)
-        .add_string_choice("mass-ping", "Mass ping")
-        .add_string_choice("crosspost", "Crosspost")
-        .add_string_choice("emoji-spam", "Emoji spam")
-        .add_string_choice("mention-spam", "Mention spam")
-        .add_string_choice("selfbot", "Selfbot")
-        .add_string_choice("invite-link", "Invite link")
-        .add_string_choice("channel-activity", "Channel activity")
-        .add_string_choice("user-activity", "User activity")
+fn module_option(
+    required: bool,
+) -> impl FnOnce(&mut CreateApplicationCommandOption) -> &mut CreateApplicationCommandOption {
+    move |opt| {
+        opt.kind(ApplicationCommandOptionType::String)
+            .name("module")
+            .description("The module")
+            .required(required)
+            .add_string_choice("Mass ping", "mass-ping")
+            .add_string_choice("Crosspost", "crosspost")
+            .add_string_choice("Emoji spam", "emoji-spam")
+            .add_string_choice("Mention spam", "mention-spam")
+            .add_string_choice("Selfbot", "selfbot")
+            .add_string_choice("Invite link", "invite-link")
+            .add_string_choice("Channel activity", "channel-activity")
+            .add_string_choice("User activity", "user-activity")
+    }
 }
 
 fn build_module_subcommand(cmd: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
@@ -68,14 +72,14 @@ fn build_enabled_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cr
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("get")
-                .description("Get whether the module is enabled")
-                .create_sub_option(module_option)
+                .description("Get whether the module is enabled, or the enabled status of all modules")
+                .create_sub_option(module_option(false))
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("set")
                 .description("Set whether the module is enabled")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
                 .create_sub_option(|opt| {
                     opt.kind(ApplicationCommandOptionType::Boolean)
                         .name("enabled")
@@ -93,19 +97,19 @@ fn build_exclusion_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut 
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("get")
                 .description("Shows all user/role exclusions for the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("add")
                 .description("Adds a new user/role exclusion to the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("remove")
                 .description("Removes a given user/role exclusion from the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
 }
 
@@ -117,13 +121,13 @@ fn build_action_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cre
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("get")
                 .description("Shows all actions associated with the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("add")
                 .description("Adds a new action to the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
                 .create_sub_option(|sub| {
                     sub.kind(ApplicationCommandOptionType::String)
                         .name("action")
@@ -147,7 +151,7 @@ fn build_action_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cre
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("remove")
                 .description("Removes a given action from the module based on its index")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
 }
 
@@ -159,13 +163,13 @@ fn build_setting_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cr
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("get")
                 .description("Displays all settings and their values for the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("set")
                 .description("Sets the value of a setting of the module")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
                 .create_sub_option(|sub| {
                     sub.kind(ApplicationCommandOptionType::String)
                         .name("name")
@@ -183,7 +187,7 @@ fn build_setting_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cr
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("reset")
                 .description("Resets the value of a setting of the module to its default value")
-                .create_sub_option(module_option)
+                .create_sub_option(module_option(true))
                 .create_sub_option(|sub| {
                     sub.kind(ApplicationCommandOptionType::String)
                         .name("name")
@@ -227,6 +231,7 @@ async fn process_command(
     match Command::from_str(cmd.name.as_ref()) {
         Ok(command) => {
             match (&interact.member, &interact.user) {
+                // TODO: print the entire message instead of the parsed command
                 (Some(Member { user, .. }), None) => {
                     info!("{} ({}) in {:?}: {:?}", user.tag(), user, interact.guild_id, command)
                 }
@@ -260,6 +265,14 @@ fn internal_error_message<'a>(
             .timestamp(&Utc::now())
             .colour(Colour::RED)
     })
+}
+
+fn enabled_string(enabled: bool) -> String {
+    if enabled {
+        format!("{} enabled", UNICODE_CHECK)
+    } else {
+        format!("{} disabled", UNICODE_CROSS)
+    }
 }
 
 async fn respond_success(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
