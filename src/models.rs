@@ -48,6 +48,7 @@ pub struct NewModuleSetting<'a> {
 #[derive(Queryable, Debug)]
 pub struct GuildSettings {
     pub guild: i64,
+    pub admin_role: Option<i64>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]
@@ -56,4 +57,5 @@ pub struct GuildSettings {
 #[changeset_options(treat_none_as_null = "true")]
 pub struct NewGuildSettings {
     pub guild: i64,
+    pub admin_role: Option<i64>,
 }

@@ -1,24 +1,29 @@
 use crate::{models, DbConn};
 use diesel::prelude::*;
 use log::*;
-use serenity::model::id::GuildId;
+use serenity::model::id::{GuildId, RoleId};
 
 #[derive(Debug, Clone)]
 pub struct GuildSettings {
     guild: GuildId,
+    admin_role: Option<RoleId>,
 }
 
 impl From<models::GuildSettings> for GuildSettings {
     fn from(m: models::GuildSettings) -> Self {
         Self {
             guild: GuildId(m.guild as u64),
+            admin_role: None,
         }
     }
 }
 
 impl GuildSettings {
     pub fn default_with_guild(guild: GuildId) -> Self {
-        Self { guild }
+        Self {
+            guild,
+            admin_role: None,
+        }
     }
 
     pub fn get_for_guild(guild: GuildId, db: &DbConn) -> anyhow::Result<Self> {
@@ -33,11 +38,21 @@ impl GuildSettings {
         Ok(settings)
     }
 
+    pub fn get_admin_role(&self) -> Option<RoleId> {
+        self.admin_role
+    }
+
+    pub fn set_admin_role(&mut self, admin_role: RoleId, db: &DbConn) -> anyhow::Result<()> {
+        self.admin_role = Some(admin_role);
+        self.update_db(db)
+    }
+
     fn update_db(&self, db: &DbConn) -> anyhow::Result<()> {
         use crate::schema::guild_settings;
 
         let new_settings = models::NewGuildSettings {
             guild: self.guild.0 as i64,
+            admin_role: self.admin_role.map(|id| id.0 as i64),
         };
 
         // return the inserted row's guild ID but don't store it anywhere, because this way diesel will error if the

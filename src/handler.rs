@@ -80,6 +80,7 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interact: Interaction) {
+        // TODO: calculate delay and latency like above
         interaction::process(ctx, interact).await;
     }
 }

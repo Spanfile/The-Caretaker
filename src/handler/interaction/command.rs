@@ -1,12 +1,13 @@
-mod module_subcommand;
+mod module;
 
-use self::module_subcommand::ModuleSubcommand;
+use self::module::ModuleSubcommand;
 use super::{enabled_string, respond, respond_embed, respond_success};
 use crate::{
     error::InternalError,
     ext::{DurationExt, UserdataExt},
+    guild_settings::GuildSettings,
     latency_counter::LatencyCounter,
-    BotUptime, ShardMetadata,
+    BotUptime, DbPool, ShardMetadata,
 };
 use chrono::Utc;
 use humantime::format_duration;
@@ -25,6 +26,7 @@ pub enum Command {
     Fail,
     Success,
     Module,
+    SetAdminRole,
 }
 
 #[async_trait]
@@ -77,6 +79,7 @@ impl Command {
             Command::Success => super::respond_success(ctx, interact).await,
             Command::Status => status_command(ctx, interact).await,
             Command::Module => run_subcommand::<ModuleSubcommand>(ctx, interact, &cmd.options).await,
+            Command::SetAdminRole => set_admin_role(ctx, interact, &cmd.options).await,
         }
     }
 }
@@ -120,7 +123,7 @@ async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result
     let action_latency = latency.get_action().await;
     let message_latency = latency.get_message().await;
 
-    super::respond_embed(ctx, interact, |e| {
+    respond_embed(ctx, interact, |e| {
         e.field(
             "Shard / total shards",
             format!("{} / {}", own_shard.id + 1, shards.len(),),
@@ -152,10 +155,26 @@ async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result
             false,
         );
 
-        // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>,
-        // which will construct the timestamp string out of it.`, but serenity itself implements the
-        // conversion only for references to datetimes, not datetimes directly
+        // the serenity docs state that `You can also pass an instance of chrono::DateTime<Utc>, which will construct
+        // the timestamp string out of it.`, but serenity itself implements the conversion only for references to
+        // datetimes, not datetimes directly
         e.timestamp(&Utc::now())
     })
     .await
+}
+
+async fn set_admin_role(
+    ctx: &Context,
+    interact: &Interaction,
+    cmd_options: &[ApplicationCommandInteractionDataOption],
+) -> anyhow::Result<()> {
+    let admin_role = command_option!(cmd_options, 0, Role)?;
+
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+
+    let mut guild_settings = GuildSettings::get_for_guild(admin_role.guild_id, &db)?;
+    guild_settings.set_admin_role(admin_role.id, &db)?;
+
+    respond_success(ctx, interact).await
 }

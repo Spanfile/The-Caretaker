@@ -18,6 +18,7 @@ table! {
 
     guild_settings (guild) {
         guild -> Int8,
+        admin_role -> Nullable<Int8>,
     }
 }
 

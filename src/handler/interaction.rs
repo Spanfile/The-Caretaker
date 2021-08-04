@@ -29,6 +29,7 @@ pub async fn build_commands(ctx: &Context) {
             .create_application_command(|cmd| cmd.name("fail").description("Deliberately returns an error"))
             .create_application_command(|cmd| cmd.name("success").description("Responds with a success message"))
             .create_application_command(build_module_subcommand)
+            .create_application_command(build_admin_subcommand)
     })
     .await
     {
@@ -200,6 +201,17 @@ fn build_setting_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut Cr
                         .description("The name of the setting")
                         .required(true)
                 })
+        })
+}
+
+fn build_admin_subcommand(opt: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
+    opt.name("set-admin-role")
+        .description("Set the role that is allowed to control Caretaker")
+        .create_option(|opt| {
+            opt.kind(ApplicationCommandOptionType::Role)
+                .name("role")
+                .description("The role allowed to control Caretaker")
+                .required(true)
         })
 }
 
