@@ -35,6 +35,4 @@ pub enum ArgumentError {
     NoSuchSetting(String),
     #[error("Invalid notify message format: {0}")]
     InvalidNotifyFormat(String),
-    #[error("Malformed command: {0}")]
-    MalformedCommand(String),
 }

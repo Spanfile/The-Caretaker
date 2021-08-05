@@ -4,6 +4,8 @@
 #![warn(clippy::panic_in_result_fn)]
 #![warn(clippy::too_many_lines)]
 #![warn(clippy::single_match_else)]
+#![warn(clippy::unused_async)]
+#![warn(clippy::unused_self)]
 
 // ew what is this, rust 2015?
 #[macro_use]

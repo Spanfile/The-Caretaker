@@ -246,24 +246,20 @@ async fn process_command(
     interact: &Interaction,
     cmd: &ApplicationCommandInteractionData,
 ) -> anyhow::Result<()> {
-    match Command::from_str(cmd.name.as_ref()) {
-        Ok(command) => {
-            match (&interact.member, &interact.user) {
-                // TODO: print the entire message instead of the parsed command
-                (Some(Member { user, .. }), None) => {
-                    info!("{} ({}) in {:?}: {:?}", user.tag(), user, interact.guild_id, command)
-                }
-                (None, Some(user)) => info!("{} ({}) in DM: {:?}", user.tag(), user, command),
-                _ => warn!("Both interact.member and interact.user are None, running command anyways..."),
-            };
+    let command = Command::from_str(cmd.name.as_ref())
+        .map_err(|e| InternalError::ImpossibleCase(format!("parsing command failed: {:?}", e)))?;
 
-            command.run(ctx, interact, cmd).await
+    match (&interact.member, &interact.user) {
+        (Some(Member { user, .. }), None) => {
+            info!("{} ({}) in {:?}: {:?}", user.tag(), user, interact.guild_id, command)
         }
-        Err(e) => {
-            error!("Failed to parse slash command: {:?}", e);
-            Err(InternalError::ImpossibleCase(String::from("parsing command failed")).into())
+        (None, Some(user)) => {
+            info!("{} ({}) in DM: {:?}", user.tag(), user, command)
         }
-    }
+        _ => warn!("Both interact.member and interact.user are None, running command anyways..."),
+    };
+
+    command.run(ctx, interact, cmd).await
 }
 
 fn argument_error_message<'a>(

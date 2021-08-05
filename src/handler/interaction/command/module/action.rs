@@ -17,7 +17,8 @@ use serenity::{
 use std::{borrow::Cow, convert::TryInto, str::FromStr};
 use strum::EnumString;
 
-const NO_ACTIONS: &str = "There aren't any actions defined for this module. Add some with the `add-action` subcommand!";
+const NO_ACTIONS: &str =
+    "There aren't any actions defined for this module. Add some with the `/module action add` command!";
 
 #[derive(Debug, EnumString)]
 #[strum(serialize_all = "kebab-case")]

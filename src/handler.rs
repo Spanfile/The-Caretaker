@@ -70,7 +70,7 @@ impl EventHandler for Handler {
             delay, msg.timestamp
         );
 
-        message::process(msg, &self.msg_tx).await;
+        message::process(msg, &self.msg_tx);
 
         let data = ctx.data.read().await;
         match data.get_userdata::<LatencyCounter>() {

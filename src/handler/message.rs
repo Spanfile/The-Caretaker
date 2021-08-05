@@ -3,18 +3,18 @@ use serenity::model::channel::{Message, MessageType};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-pub async fn process(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
+pub fn process(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
     // straight-up ignore bot messages and non-regular messages
     if is_from_bot(&msg) || !is_regular(&msg) {
         return;
     }
 
-    if let Err(e) = process_message(msg, msg_tx).await {
+    if let Err(e) = process_message(msg, msg_tx) {
         error!("Message processing failed: {}", e)
     }
 }
 
-async fn process_message(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) -> anyhow::Result<()> {
+fn process_message(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) -> anyhow::Result<()> {
     // dirty short-circuit side-effect
     if msg.guild_id.is_some() && msg_tx.send(Arc::new(msg)).is_err() {
         error!("Sending message to broadcast channel failed (channel closed)");
