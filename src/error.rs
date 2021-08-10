@@ -37,4 +37,6 @@ pub enum ArgumentError {
     InvalidNotifyFormat(String),
     #[error("You do not have permission to run that command")]
     NoPermission,
+    #[error("Exclusion already exists")]
+    ExclusionAlreadyExists,
 }

@@ -4,14 +4,17 @@ pub mod settings;
 pub mod dbimport {
     pub use super::{action::Action_kind, Exclusion_kind, Module_kind};
 }
+pub mod exclusion;
 
 use self::{
     action::{Action, ActionKind},
+    exclusion::{Exclusion, ModuleExclusion},
     settings::{ModuleSettings, Settings},
 };
 use crate::{
     error::{ArgumentError, InternalError},
-    models, schema, DbConn,
+    models::{self, NewModuleExclusion},
+    schema, DbConn,
 };
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
@@ -40,7 +43,7 @@ pub enum ModuleKind {
 #[DieselType = "Exclusion_kind"]
 pub enum ExclusionKind {
     User,
-    Group,
+    Role,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -296,6 +299,47 @@ impl Module {
             .get_results::<models::ModuleSetting>(db)?;
 
         debug!("{:?}: insert {:?} -> {:?}", self, rows, new_values);
+        Ok(())
+    }
+
+    pub fn get_exclusions(self, db: &DbConn) -> anyhow::Result<ModuleExclusion> {
+        use schema::module_exclusions;
+
+        let rows = module_exclusions::table
+            .filter(
+                module_exclusions::guild
+                    .eq(self.guild.0 as i64)
+                    .and(module_exclusions::module.eq(self.kind)),
+            )
+            .load::<models::ModuleExclusion>(db)?;
+        let exclusions = ModuleExclusion::from_db_rows(&rows);
+
+        debug!("{:?}: {:?}", self, exclusions);
+        Ok(exclusions)
+    }
+
+    pub fn add_exclusion(self, exclusion: Exclusion, db: &DbConn) -> anyhow::Result<()> {
+        use schema::module_exclusions;
+
+        let (kind, id) = match exclusion {
+            Exclusion::User(id) => (ExclusionKind::User, id.0 as i64),
+            Exclusion::Role(id) => (ExclusionKind::Role, id.0 as i64),
+        };
+        let exclusion_model = NewModuleExclusion {
+            guild: self.guild.0 as i64,
+            module: self.kind,
+            kind,
+            id,
+        };
+
+        // return the exclusion's guild ID but don't store it anywhere, because this way diesel will error if the insert
+        // affected no rows
+        diesel::insert_into(module_exclusions::table)
+            .values(&exclusion_model)
+            .returning(module_exclusions::guild)
+            .get_result::<i64>(db)?;
+
+        debug!("{:?}: insert {:?}", self, exclusion_model);
         Ok(())
     }
 }

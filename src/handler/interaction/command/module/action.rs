@@ -74,6 +74,8 @@ async fn add_action(
     cmd_options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
+    // TODO: limit on how many actions can be added
+
     let action_kind = ActionKind::from_str(command_option!(cmd_options, 1, String)?)
         .map_err(|e| InternalError::ImpossibleCase(format!("invalid action: {:?}", e)))?;
 

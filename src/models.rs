@@ -1,5 +1,5 @@
-use super::schema::{actions, guild_settings, module_settings, modules};
-use crate::module::{action::ActionKind, ModuleKind};
+use super::schema::{actions, guild_settings, module_exclusions, module_settings, modules};
+use crate::module::{action::ActionKind, ExclusionKind, ModuleKind};
 
 #[derive(Queryable, Insertable, AsChangeset, Debug)]
 pub struct Module {
@@ -58,4 +58,21 @@ pub struct GuildSettings {
 pub struct NewGuildSettings {
     pub guild: i64,
     pub admin_role: Option<i64>,
+}
+
+#[derive(Queryable, Debug)]
+pub struct ModuleExclusion {
+    pub guild: i64,
+    pub module: ModuleKind,
+    pub kind: ExclusionKind,
+    pub id: i64,
+}
+
+#[derive(Insertable, AsChangeset, Debug)]
+#[table_name = "module_exclusions"]
+pub struct NewModuleExclusion {
+    pub guild: i64,
+    pub module: ModuleKind,
+    pub kind: ExclusionKind,
+    pub id: i64,
 }

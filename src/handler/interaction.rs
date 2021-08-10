@@ -105,12 +105,24 @@ fn build_exclusion_subcommand(opt: &mut CreateApplicationCommandOption) -> &mut 
                 .name("add")
                 .description("Adds a new user/role exclusion to the module")
                 .create_sub_option(module_option(true))
+                .create_sub_option(|opt| {
+                    opt.kind(ApplicationCommandOptionType::Mentionable)
+                        .name("user_or_role")
+                        .description("The user or role to exclude")
+                        .required(true)
+                })
         })
         .create_sub_option(|sub| {
             sub.kind(ApplicationCommandOptionType::SubCommand)
                 .name("remove")
                 .description("Removes a given user/role exclusion from the module")
                 .create_sub_option(module_option(true))
+                .create_sub_option(|opt| {
+                    opt.kind(ApplicationCommandOptionType::Mentionable)
+                        .name("user_or_role")
+                        .description("The user or role exclusion to remove")
+                        .required(true)
+                })
         })
 }
 
@@ -223,7 +235,7 @@ pub async fn process(ctx: Context, interact: Interaction) {
             if let Err(e) = process_command(&ctx, &interact, cmd).await {
                 if let Err(e) = respond(&ctx, &interact, |msg| {
                     if let Some(e) = e.downcast_ref::<ArgumentError>() {
-                        debug!("Command processing failed with argument error: {}", e);
+                        warn!("Command processing failed with argument error: {}", e);
                         argument_error_message(e, msg)
                     } else {
                         error!("Command processing failed with internal error: {}", e);

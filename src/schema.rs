@@ -26,7 +26,7 @@ table! {
     use diesel::sql_types::*;
     use crate::module::dbimport::*;
 
-    module_exclusions (guild, module) {
+    module_exclusions (guild, module, kind, id) {
         guild -> Int8,
         module -> Module_kind,
         kind -> Exclusion_kind,
