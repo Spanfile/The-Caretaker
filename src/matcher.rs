@@ -109,14 +109,14 @@ where
             match self.run_matcher(&msg).await {
                 Ok(true) => {
                     info!(
-                        "{}: matched message {} in channel {} in guild {:?} by {}",
-                        self.kind, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
+                        "{} in {:?}: matched message {} in channel {} by {}",
+                        self.kind, msg.guild_id, msg.id, msg.channel_id, msg.author.id,
                     );
 
                     self.tx.send((self.kind, msg)).await?;
                 }
                 Err(e) => {
-                    error!("{}: matching failed: {:?}", self.kind, e);
+                    error!("{} in {:?}: matching failed: {:?}", self.kind, msg.guild_id, e);
                     continue;
                 }
                 _ => (),
@@ -130,24 +130,35 @@ where
         let module = data.get_userdata::<ModuleCache>()?.get(guild_id, self.kind).await;
 
         if !module.is_enabled() {
-            debug!("{}: module disabled, not matching", self.kind);
+            debug!("{} in {}: module disabled, not matching", self.kind, guild_id);
             return Ok(false);
         }
 
-        let settings = {
+        let (settings, exclusions) = {
             let db = data.get_userdata::<DbPool>()?.get()?;
             // the author of enum_dispatch is an idiot so their TryInto impl returns a 'static &str as an error, which
             // is everything but (it doesn't impl Error)
-            module.get_settings(&db)?.try_into().map_err(|_| {
+            let settings = module.get_settings(&db)?.try_into().map_err(|_| {
                 InternalError::ConversionFailed("tried to convert ModuleSettings variant to invalid type")
-            })?
+            })?;
+            let exclusions = module.get_exclusions(&db)?;
+
+            (settings, exclusions)
         };
+
+        if let Some(member) = &msg.member {
+            if exclusions.should_exclude(&msg.author, member) {
+                debug!("{} in {}: user {} is excluded", self.kind, guild_id, msg.author.id);
+                return Ok(false);
+            }
+        }
 
         let start = Instant::now();
         let result = self.matcher.is_match(settings, msg).await;
         debug!(
-            "{}: returned match result {:?} in {:?}",
+            "{} in {}: returned match result {:?} in {:?}",
             self.kind,
+            guild_id,
             result,
             start.elapsed()
         );

@@ -1,5 +1,10 @@
 use crate::{models, module::ExclusionKind};
-use serenity::model::id::{RoleId, UserId};
+use log::*;
+use serenity::model::{
+    guild::PartialMember,
+    id::{RoleId, UserId},
+    prelude::*,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Exclusion {
@@ -35,5 +40,28 @@ impl ModuleExclusion {
 
     pub fn contains(&self, excl: Exclusion) -> bool {
         self.exclusions.iter().any(|e| *e == excl)
+    }
+
+    // when a message arrives, the user info is separate from the member info so to avoid a cache/HTTP hit, separate
+    // them here
+    pub fn should_exclude(&self, user: &User, member: &PartialMember) -> bool {
+        for excl in &self.exclusions {
+            match excl {
+                Exclusion::User(id) => {
+                    if user.id == *id {
+                        debug!("Matched user exclusion: {}", id);
+                        return true;
+                    }
+                }
+                Exclusion::Role(id) => {
+                    if member.roles.contains(id) {
+                        debug!("Matched role exclusion: {} in {:?}", id, member.roles);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 }

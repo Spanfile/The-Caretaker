@@ -36,7 +36,7 @@ pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
             };
 
             for (id, runner) in runners.iter() {
-                info!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
+                debug!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
 
                 if let Some(latency) = runner.latency {
                     latency_counter.tick_gateway(latency).await;
@@ -88,8 +88,8 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
 
             let module = module_cache.get(guild_id, kind).await;
             info!(
-                "Running actions for guild {} module {} message {}",
-                guild_id, kind, msg.id
+                "Running {} actions for message {} in {} by {}",
+                kind, msg.id, guild_id, msg.author.id
             );
 
             let db = match db_pool.get() {
