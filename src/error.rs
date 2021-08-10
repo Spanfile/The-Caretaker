@@ -39,4 +39,6 @@ pub enum ArgumentError {
     NoPermission,
     #[error("Exclusion already exists")]
     ExclusionAlreadyExists,
+    #[error("No such exclusion")]
+    NoSuchExclusion,
 }

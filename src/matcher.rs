@@ -130,7 +130,7 @@ where
         let module = data.get_userdata::<ModuleCache>()?.get(guild_id, self.kind).await;
 
         if !module.is_enabled() {
-            trace!("{}: module disabled, not matching", self.kind);
+            debug!("{}: module disabled, not matching", self.kind);
             return Ok(false);
         }
 
@@ -145,7 +145,7 @@ where
 
         let start = Instant::now();
         let result = self.matcher.is_match(settings, msg).await;
-        info!(
+        debug!(
             "{}: returned match result {:?} in {:?}",
             self.kind,
             result,

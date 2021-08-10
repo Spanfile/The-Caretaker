@@ -88,22 +88,8 @@ async fn add_exclusion(
     cmd_options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    // have to do the option retrieval by hand since the command_option! macro only does one kind of option, not two
-    let excl = cmd_options
-        .get(1)
-        .and_then(|opt| opt.resolved.as_ref())
-        .map(|value| match value {
-            ApplicationCommandInteractionDataOptionValue::User(user, _) => Ok(Exclusion::User(user.id)),
-            ApplicationCommandInteractionDataOptionValue::Role(role) => Ok(Exclusion::Role(role.id)),
-            value => Err(InternalError::ImpossibleCase(format!(
-                "parsing subcommand failed: invalid value: {:?}",
-                value
-            ))),
-        })
-        .transpose()?
-        .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument")))?;
-
     // TODO: limit on how many exclusions can be added
+    let excl = get_exclusion_option(cmd_options)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
@@ -123,5 +109,33 @@ async fn remove_exclusion(
     cmd_options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    unimplemented!()
+    let excl = get_exclusion_option(cmd_options)?;
+
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let exclusions = module.get_exclusions(&db)?;
+
+    if exclusions.contains(excl) {
+        module.remove_exclusion(excl, &db)?;
+        respond_success(ctx, interact).await
+    } else {
+        Err(ArgumentError::NoSuchExclusion.into())
+    }
+}
+
+fn get_exclusion_option(cmd_options: &[ApplicationCommandInteractionDataOption]) -> Result<Exclusion, InternalError> {
+    // have to do the option retrieval by hand since the command_option! macro only does one kind of option, not two
+    cmd_options
+        .get(1)
+        .and_then(|opt| opt.resolved.as_ref())
+        .map(|value| match value {
+            ApplicationCommandInteractionDataOptionValue::User(user, _) => Ok(Exclusion::User(user.id)),
+            ApplicationCommandInteractionDataOptionValue::Role(role) => Ok(Exclusion::Role(role.id)),
+            value => Err(InternalError::ImpossibleCase(format!(
+                "parsing subcommand failed: invalid value: {:?}",
+                value
+            ))),
+        })
+        .transpose()?
+        .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument")))
 }

@@ -97,7 +97,7 @@ impl Module {
             modules.insert(m.module, m.into());
         }
 
-        debug!("{:?}", modules);
+        debug!("Modules for {}: {:?}", guild, modules);
         Ok(modules)
     }
 
@@ -110,7 +110,7 @@ impl Module {
             .optional()?
             .map_or_else(|| Module::default_with_kind_and_guild(kind, guild), Module::from);
 
-        debug!("{:?}", module);
+        debug!("Module {} for {}: {:?}", kind, guild, module);
         Ok(module)
     }
 
@@ -146,7 +146,7 @@ impl Module {
             .returning(modules::guild)
             .get_result::<i64>(db)?;
 
-        debug!("{:?}: insert {:?}", self, enabled_setting);
+        debug!("{:?}: insert module {:?}", self, enabled_setting);
         Ok(())
     }
 
@@ -178,7 +178,7 @@ impl Module {
             })
             .collect::<Result<_, _>>()?;
 
-        debug!("{:?}: {:?}", self, actions);
+        debug!("{:?} actions: {:?}", self, actions);
         Ok(actions)
     }
 
@@ -207,7 +207,7 @@ impl Module {
             .returning(actions::id)
             .get_result::<i32>(db)?;
 
-        debug!("{:?}: insert {:?} -> ID {}", self, action_model, id);
+        debug!("{:?}: insert action {:?} -> ID {}", self, action_model, id);
         Ok(id)
     }
 
@@ -229,7 +229,7 @@ impl Module {
             .returning(actions::id)
             .get_result::<i32>(db)?;
 
-        debug!("{:?}: delete {:?}", self, delete);
+        debug!("{:?}: delete action {:?}", self, delete);
         Ok(())
     }
 
@@ -262,7 +262,7 @@ impl Module {
             .load::<models::ModuleSetting>(db)?;
         let settings = ModuleSettings::from_db_rows(self.kind, &rows)?;
 
-        debug!("{:?}: {:?}", self, settings);
+        debug!("{:?} settings: {:?}", self, settings);
         Ok(settings)
     }
 
@@ -298,7 +298,7 @@ impl Module {
             ))
             .get_results::<models::ModuleSetting>(db)?;
 
-        debug!("{:?}: insert {:?} -> {:?}", self, rows, new_values);
+        debug!("{:?}: insert settings {:?} -> {:?}", self, rows, new_values);
         Ok(())
     }
 
@@ -314,14 +314,14 @@ impl Module {
             .load::<models::ModuleExclusion>(db)?;
         let exclusions = ModuleExclusion::from_db_rows(&rows);
 
-        debug!("{:?}: {:?}", self, exclusions);
+        debug!("{:?} exclusions: {:?}", self, exclusions);
         Ok(exclusions)
     }
 
-    pub fn add_exclusion(self, exclusion: Exclusion, db: &DbConn) -> anyhow::Result<()> {
+    pub fn add_exclusion(self, excl: Exclusion, db: &DbConn) -> anyhow::Result<()> {
         use schema::module_exclusions;
 
-        let (kind, id) = match exclusion {
+        let (kind, id) = match excl {
             Exclusion::User(id) => (ExclusionKind::User, id.0 as i64),
             Exclusion::Role(id) => (ExclusionKind::Role, id.0 as i64),
         };
@@ -339,7 +339,33 @@ impl Module {
             .returning(module_exclusions::guild)
             .get_result::<i64>(db)?;
 
-        debug!("{:?}: insert {:?}", self, exclusion_model);
+        debug!("{:?}: insert exclusion {:?}", self, exclusion_model);
+        Ok(())
+    }
+
+    pub fn remove_exclusion(self, excl: Exclusion, db: &DbConn) -> anyhow::Result<()> {
+        use schema::module_exclusions;
+
+        let (kind, id) = match excl {
+            Exclusion::User(id) => (ExclusionKind::User, id.0 as i64),
+            Exclusion::Role(id) => (ExclusionKind::Role, id.0 as i64),
+        };
+
+        // return the deleted row's ID but don't store it anywhere, because this way diesel will error if the delete
+        // affected no rows
+        diesel::delete(
+            module_exclusions::table.filter(
+                module_exclusions::guild
+                    .eq(self.guild.0 as i64)
+                    .and(module_exclusions::module.eq(self.kind))
+                    .and(module_exclusions::kind.eq(kind))
+                    .and(module_exclusions::id.eq(id)),
+            ),
+        )
+        .returning(module_exclusions::guild)
+        .get_result::<i64>(db)?;
+
+        debug!("{:?}: delete exclusion {:?}", self, excl);
         Ok(())
     }
 }

@@ -16,7 +16,7 @@ pub async fn process(ctx: &Context, msg: Message, msg_tx: &broadcast::Sender<Arc
 
     let delay = (Utc::now() - msg.timestamp).num_milliseconds();
     // debug!("{:?}", msg);
-    info!(
+    debug!(
         "Message handler called {}ms later from message timestamp ({})",
         delay, msg.timestamp
     );
