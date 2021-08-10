@@ -64,7 +64,7 @@ impl EventHandler for Handler {
 
     async fn message(&self, ctx: Context, msg: Message) {
         let delay = (Utc::now() - msg.timestamp).num_milliseconds();
-        debug!("{:?}", msg);
+        // debug!("{:?}", msg);
         debug!(
             "Message handler called {}ms later from message timestamp ({})",
             delay, msg.timestamp

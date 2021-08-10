@@ -35,4 +35,6 @@ pub enum ArgumentError {
     NoSuchSetting(String),
     #[error("Invalid notify message format: {0}")]
     InvalidNotifyFormat(String),
+    #[error("You do not have permission to run that command")]
+    NoPermission,
 }

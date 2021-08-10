@@ -6,7 +6,9 @@ mod setting;
 use self::{
     action::ActionSubcommand, enabled::EnabledSubcommand, exclusion::ExclusionSubcommand, setting::SettingSubcommand,
 };
-use super::{enabled_string, respond, respond_embed, respond_success, run_subcommand, SubcommandTrait};
+use super::{
+    check_permission, enabled_string, respond, respond_embed, respond_success, run_subcommand, SubcommandTrait,
+};
 use crate::{
     error::{ArgumentError, InternalError},
     ext::UserdataExt,
@@ -40,6 +42,8 @@ impl SubcommandTrait for ModuleSubcommand {
         interact: &Interaction,
         cmd_options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
+        check_permission(ctx, interact).await?;
+
         match self {
             ModuleSubcommand::Enabled => run_subcommand::<EnabledSubcommand>(ctx, interact, cmd_options).await,
             ModuleSubcommand::Action => run_subcommand::<ActionSubcommand>(ctx, interact, cmd_options).await,

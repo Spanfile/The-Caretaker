@@ -3,7 +3,7 @@ mod module;
 use self::module::ModuleSubcommand;
 use super::{enabled_string, respond, respond_embed, respond_success};
 use crate::{
-    error::InternalError,
+    error::{ArgumentError, InternalError},
     ext::{DurationExt, UserdataExt},
     guild_settings::GuildSettings,
     latency_counter::LatencyCounter,
@@ -11,10 +11,14 @@ use crate::{
 };
 use chrono::Utc;
 use humantime::format_duration;
+use log::*;
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
+    model::{
+        guild::Guild,
+        interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
+    },
 };
 use std::str::FromStr;
 use strum::EnumString;
@@ -104,6 +108,60 @@ where
     subcommand.run(ctx, interact, &sub.options).await
 }
 
+async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+    let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
+    let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
+
+    if check_owner_permission(ctx, interact).await.is_ok() {
+        debug!("Permission check ok: user {} is owner of {}", member.user.id, guild_id);
+        return Ok(());
+    }
+
+    let data = ctx.data.read().await;
+    let db = data.get_userdata::<DbPool>()?.get()?;
+    let guild_settings = GuildSettings::get_for_guild(guild_id, &db)?;
+    let admin_role = guild_settings.get_admin_role();
+
+    if let Some(true) = member
+        .roles(&ctx.cache)
+        .await
+        .zip(admin_role)
+        .map(|(roles, admin_role)| roles.iter().any(|r| r.id == admin_role))
+    {
+        debug!(
+            "Permission check ok: user {} has admin role {:?} in {}",
+            member.user.id, admin_role, guild_id
+        );
+
+        Ok(())
+    } else {
+        debug!(
+            "Permission check failed: user {} doesn't have admin role {:?} in {}",
+            member.user.id, admin_role, guild_id
+        );
+
+        Err(ArgumentError::NoPermission.into())
+    }
+}
+
+async fn check_owner_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+    let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
+    let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
+    let guild = Guild::get(&ctx.http, guild_id).await?;
+
+    if guild.owner_id == member.user.id {
+        debug!("Permission check ok: user {} is owner of {}", member.user.id, guild_id);
+        Ok(())
+    } else {
+        debug!(
+            "Permission check ok: user {} is not the owner of {}",
+            member.user.id, guild_id
+        );
+
+        Err(ArgumentError::NoPermission.into())
+    }
+}
+
 async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
     let data = ctx.data.read().await;
     let shards = data.get_userdata::<ShardMetadata>()?;
@@ -168,6 +226,8 @@ async fn set_admin_role(
     interact: &Interaction,
     cmd_options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<()> {
+    check_owner_permission(ctx, interact).await?;
+
     let admin_role = command_option!(cmd_options, 0, Role)?;
 
     let data = ctx.data.read().await;
