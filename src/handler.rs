@@ -1,7 +1,7 @@
 mod interaction;
 mod message;
 
-use crate::{ext::UserdataExt, latency_counter::LatencyCounter, ShardMetadata, VERSION};
+use crate::{ShardMetadata, VERSION};
 use chrono::Utc;
 use log::*;
 use serenity::{
@@ -10,7 +10,7 @@ use serenity::{
     gateway::ConnectionStage,
     model::prelude::*,
 };
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub struct Handler {
@@ -42,7 +42,7 @@ impl EventHandler for Handler {
     }
 
     async fn resume(&self, ctx: Context, _: ResumedEvent) {
-        debug!("Shard {}: resumed", ctx.shard_id);
+        info!("Shard {}: resumed", ctx.shard_id);
     }
 
     async fn shard_stage_update(&self, ctx: Context, update: ShardStageUpdateEvent) {
@@ -63,24 +63,10 @@ impl EventHandler for Handler {
     }
 
     async fn message(&self, ctx: Context, msg: Message) {
-        let delay = (Utc::now() - msg.timestamp).num_milliseconds();
-        // debug!("{:?}", msg);
-        debug!(
-            "Message handler called {}ms later from message timestamp ({})",
-            delay, msg.timestamp
-        );
-
-        message::process(msg, &self.msg_tx);
-
-        let data = ctx.data.read().await;
-        match data.get_userdata::<LatencyCounter>() {
-            Ok(latency) => latency.tick_message(Duration::from_millis(delay as u64)).await,
-            Err(e) => error!("Failed to tick message handler latency: {:?}", e),
-        }
+        message::process(&ctx, msg, &self.msg_tx).await;
     }
 
     async fn interaction_create(&self, ctx: Context, interact: Interaction) {
-        // TODO: calculate delay and latency like above
         interaction::process(ctx, interact).await;
     }
 }

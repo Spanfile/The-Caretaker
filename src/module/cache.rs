@@ -36,7 +36,7 @@ impl ModuleCache {
             }
         }
 
-        debug!(
+        info!(
             "Module cache populated. {} modules in total across {} guilds",
             module_count,
             guilds.len()

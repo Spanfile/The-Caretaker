@@ -77,7 +77,7 @@ impl Command {
     ) -> anyhow::Result<()> {
         match self {
             Command::Fail => Err(InternalError::DeliberateError.into()),
-            Command::Success => super::respond_success(ctx, interact).await,
+            Command::Success => respond_success(ctx, interact).await,
             Command::Status => status_command(ctx, interact).await,
             Command::Module => run_subcommand::<ModuleSubcommand>(ctx, interact, &cmd.options).await,
             Command::SetAdminRole => set_admin_role(ctx, interact, &cmd.options).await,
@@ -110,7 +110,6 @@ async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Resu
     let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
 
     if check_administrator_permission(ctx, interact).await.is_ok() {
-        debug!("Permission check ok: user {} is owner of {}", member.user.id, guild_id);
         return Ok(());
     }
 
@@ -132,7 +131,7 @@ async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Resu
 
         Ok(())
     } else {
-        debug!(
+        warn!(
             "Permission check failed: user {} doesn't have admin role {:?} in {}",
             member.user.id, admin_role, guild_id
         );
@@ -153,7 +152,7 @@ async fn check_administrator_permission(ctx: &Context, interact: &Interaction) -
 
         Ok(())
     } else {
-        debug!(
+        info!(
             "Administrator permission check failed: user {} does not have Administrator permission {}",
             member.user.id, guild_id
         );

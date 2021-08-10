@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn build_db_pool(url: &str) -> anyhow::Result<Pool<ConnectionManager<PgConnection>>> {
-    debug!("Establishing pooled database connection to {}...", url);
+    info!("Establishing pooled database connection to {}...", url);
 
     let builder = Pool::builder();
     debug!("{:#?}", builder);
@@ -135,7 +135,7 @@ async fn create_discord_client(token: &str, msg_tx: broadcast::Sender<Arc<Messag
         appinfo.owner.id
     );
 
-    debug!("Initialising handler and client...");
+    info!("Initialising handler and client...");
     let handler = Handler::new(msg_tx);
     let client = Client::builder(token)
         .event_handler(handler)
@@ -153,7 +153,7 @@ async fn populate_userdata(
     db_pool: Pool<ConnectionManager<PgConnection>>,
     start_time: DateTime<Utc>,
 ) -> anyhow::Result<()> {
-    debug!("Populating userdata...");
+    info!("Populating userdata...");
     let mut data = client.data.write().await;
 
     data.insert::<ModuleCache>(module_cache);

@@ -15,12 +15,12 @@ use std::{
 use tokio::{sync::mpsc, time};
 
 pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
-    debug!("Spawning shard latency update ticker...");
+    info!("Spawning shard latency update ticker...");
 
     let shard_manager = client.shard_manager.clone();
     let client_data = client.data.clone();
     tokio::spawn(async move {
-        debug!("Starting shard latency update loop");
+        info!("Starting shard latency update loop");
         loop {
             time::sleep(Duration::from_millis(update_freq)).await;
 
@@ -36,7 +36,7 @@ pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
             };
 
             for (id, runner) in runners.iter() {
-                debug!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
+                info!("Shard {} status: {}, latency: {:?}", id, runner.stage, runner.latency);
 
                 if let Some(latency) = runner.latency {
                     latency_counter.tick_gateway(latency).await;
@@ -49,7 +49,7 @@ pub fn spawn_shard_latency_ticker(client: &Client, update_freq: u64) {
 }
 
 pub fn spawn_termination_waiter(client: &Client) {
-    debug!("Spawning termination waiter...");
+    info!("Spawning termination waiter...");
 
     let shard_manager = client.shard_manager.clone();
     tokio::spawn(async move {
@@ -60,7 +60,7 @@ pub fn spawn_termination_waiter(client: &Client) {
 }
 
 pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<MatcherResponse>) -> anyhow::Result<()> {
-    debug!("Spawning action handler...");
+    info!("Spawning action handler...");
 
     let data = client.data.read().await;
     let module_cache = data.get_userdata::<ModuleCache>()?.clone();
@@ -69,7 +69,7 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
     let cache_http = Arc::clone(&client.cache_and_http);
 
     tokio::spawn(async move {
-        debug!("Starting action handler loop");
+        info!("Starting action handler loop");
         loop {
             let (kind, msg) = if let Some(r) = rx.recv().await {
                 r
@@ -87,7 +87,7 @@ pub async fn spawn_action_handler(client: &Client, mut rx: mpsc::Receiver<Matche
             };
 
             let module = module_cache.get(guild_id, kind).await;
-            debug!(
+            info!(
                 "Running actions for guild {} module {} message {}",
                 guild_id, kind, msg.id
             );

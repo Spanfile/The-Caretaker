@@ -28,7 +28,7 @@ impl Matcher for InviteLink {
                         // if the last segment is something, but not "invite" (as in discord.com/invite), it's
                         // probably an invite
                         if !last_segment.is_empty() && last_segment != INVITE_PATH {
-                            debug!("{} looks like an invite", url);
+                            info!("{} looks like an invite", url);
                             return Ok(true);
                         }
                     }

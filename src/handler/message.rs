@@ -1,16 +1,34 @@
+use crate::{ext::UserdataExt, latency_counter::LatencyCounter};
+use chrono::Utc;
 use log::*;
-use serenity::model::channel::{Message, MessageType};
-use std::sync::Arc;
+use serenity::{
+    client::Context,
+    model::channel::{Message, MessageType},
+};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 
-pub fn process(msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
+pub async fn process(ctx: &Context, msg: Message, msg_tx: &broadcast::Sender<Arc<Message>>) {
     // straight-up ignore bot messages and non-regular messages
     if is_from_bot(&msg) || !is_regular(&msg) {
         return;
     }
 
+    let delay = (Utc::now() - msg.timestamp).num_milliseconds();
+    // debug!("{:?}", msg);
+    info!(
+        "Message handler called {}ms later from message timestamp ({})",
+        delay, msg.timestamp
+    );
+
     if let Err(e) = process_message(msg, msg_tx) {
         error!("Message processing failed: {}", e)
+    }
+
+    let data = ctx.data.read().await;
+    match data.get_userdata::<LatencyCounter>() {
+        Ok(latency) => latency.tick_message(Duration::from_millis(delay as u64)).await,
+        Err(e) => error!("Failed to tick message handler latency: {:?}", e),
     }
 }
 

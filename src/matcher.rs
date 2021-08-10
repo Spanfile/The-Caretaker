@@ -76,7 +76,7 @@ async fn run_matcher<M>(
     };
 
     match runner.run().await {
-        Ok(_) => debug!("{}: runner returned succesfully", kind),
+        Ok(_) => info!("{}: runner returned succesfully", kind),
         Err(e) => error!("{}: runner returned with error: {}", kind, e),
     }
 }
@@ -108,7 +108,7 @@ where
 
             match self.run_matcher(&msg).await {
                 Ok(true) => {
-                    debug!(
+                    info!(
                         "{}: matched message {} in channel {} in guild {:?} by {}",
                         self.kind, msg.id, msg.channel_id, msg.guild_id, msg.author.id,
                     );
@@ -145,7 +145,7 @@ where
 
         let start = Instant::now();
         let result = self.matcher.is_match(settings, msg).await;
-        debug!(
+        info!(
             "{}: returned match result {:?} in {:?}",
             self.kind,
             result,

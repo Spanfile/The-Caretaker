@@ -22,7 +22,7 @@ const UNICODE_CHECK: char = '\u{2705}';
 const UNICODE_CROSS: char = '\u{274C}';
 
 pub async fn build_commands(ctx: &Context) {
-    debug!("Registering commands for shard {}", ctx.shard_id);
+    info!("Registering commands for shard {}", ctx.shard_id);
 
     match ApplicationCommand::create_global_application_commands(&ctx.http, |cmds| {
         cmds.create_application_command(|cmd| cmd.name("status").description("Show the bot's status"))
@@ -232,23 +232,15 @@ pub async fn process(ctx: Context, interact: Interaction) {
 
     match interact.data {
         Some(InteractionData::ApplicationCommand(ref cmd)) => {
-            if let Err(e) = process_command(&ctx, &interact, cmd).await {
-                if let Err(e) = respond(&ctx, &interact, |msg| {
-                    if let Some(e) = e.downcast_ref::<ArgumentError>() {
-                        warn!("Command processing failed with argument error: {}", e);
-                        argument_error_message(e, msg)
-                    } else {
-                        error!("Command processing failed with internal error: {}", e);
-                        internal_error_message(&e, msg)
-                    }
-                })
-                .await
-                {
-                    error!("Failed responding to interaction: {:?}", e);
+            if let Err(cmd_e) = process_command(&ctx, &interact, cmd).await {
+                if let Err(resp_e) = respond_error(&ctx, &interact, &cmd_e).await {
+                    error!("Failed responding to interaction: {:?}", resp_e);
                 }
             }
         }
-        Some(InteractionData::MessageComponent(_msg)) => {}
+        Some(InteractionData::MessageComponent(_msg)) => {
+            debug!("hmm wot dis")
+        }
         _ => (),
     }
 }
@@ -258,20 +250,31 @@ async fn process_command(
     interact: &Interaction,
     cmd: &ApplicationCommandInteractionData,
 ) -> anyhow::Result<()> {
+    let (user, guild) = match (&interact.member, &interact.user) {
+        (Some(Member { user, .. }), None) => (user, interact.guild_id),
+        (None, Some(user)) => (user, None),
+        _ => {
+            error!("Error while processing command: both member and user in interact are None");
+            return Err(
+                InternalError::ImpossibleCase(String::from("both member and user in interact are None")).into(),
+            );
+        }
+    };
+
     let command = Command::from_str(cmd.name.as_ref())
         .map_err(|e| InternalError::ImpossibleCase(format!("parsing command failed: {:?}", e)))?;
 
-    match (&interact.member, &interact.user) {
-        (Some(Member { user, .. }), None) => {
-            info!("{} ({}) in {:?}: {:?}", user.tag(), user, interact.guild_id, command)
-        }
-        (None, Some(user)) => {
-            info!("{} ({}) in DM: {:?}", user.tag(), user, command)
-        }
-        _ => warn!("Both interact.member and interact.user are None, running command anyways..."),
+    let location = if let Some(guild) = guild {
+        guild.to_string()
+    } else {
+        String::from("DM")
     };
 
-    command.run(ctx, interact, cmd).await
+    info!("{} ({}) in {}: {:?}", user.tag(), user, location, command);
+    command.run(ctx, interact, cmd).await?;
+
+    info!("{} ({}) in {}: command ran succesfully", user.tag(), user, location);
+    Ok(())
 }
 
 fn argument_error_message<'a>(
@@ -312,6 +315,19 @@ where
 {
     respond(ctx, interact, |msg| msg.create_embed(f)).await?;
     Ok(())
+}
+
+async fn respond_error(ctx: &Context, interact: &Interaction, e: &anyhow::Error) -> anyhow::Result<()> {
+    respond(ctx, interact, |msg| {
+        if let Some(arg_e) = e.downcast_ref::<ArgumentError>() {
+            warn!("Command processing failed with argument error: {}", arg_e);
+            argument_error_message(arg_e, msg)
+        } else {
+            error!("Command processing failed with internal error: {}", e);
+            internal_error_message(e, msg)
+        }
+    })
+    .await
 }
 
 async fn respond<F>(ctx: &Context, interact: &Interaction, f: F) -> anyhow::Result<()>
