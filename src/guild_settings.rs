@@ -13,7 +13,7 @@ impl From<models::GuildSettings> for GuildSettings {
     fn from(m: models::GuildSettings) -> Self {
         Self {
             guild: GuildId(m.guild as u64),
-            admin_role: None,
+            admin_role: m.admin_role.map(|r| RoleId(r)),
         }
     }
 }
