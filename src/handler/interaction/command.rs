@@ -15,10 +15,7 @@ use log::*;
 use serenity::{
     async_trait,
     client::Context,
-    model::{
-        guild::Guild,
-        interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
-    },
+    model::interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
 };
 use std::str::FromStr;
 use strum::EnumString;
@@ -112,7 +109,7 @@ async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Resu
     let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
     let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
 
-    if check_owner_permission(ctx, interact).await.is_ok() {
+    if check_administrator_permission(ctx, interact).await.is_ok() {
         debug!("Permission check ok: user {} is owner of {}", member.user.id, guild_id);
         return Ok(());
     }
@@ -144,17 +141,20 @@ async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Resu
     }
 }
 
-async fn check_owner_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+async fn check_administrator_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
     let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
     let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
-    let guild = Guild::get(&ctx.http, guild_id).await?;
 
-    if guild.owner_id == member.user.id {
-        debug!("Permission check ok: user {} is owner of {}", member.user.id, guild_id);
+    if member.permissions(ctx).await?.administrator() {
+        debug!(
+            "Administrator permission check ok: user {} has Administrator permission in {}",
+            member.user.id, guild_id
+        );
+
         Ok(())
     } else {
         debug!(
-            "Permission check ok: user {} is not the owner of {}",
+            "Administrator permission check failed: user {} does not have Administrator permission {}",
             member.user.id, guild_id
         );
 
@@ -226,7 +226,7 @@ async fn set_admin_role(
     interact: &Interaction,
     cmd_options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<()> {
-    check_owner_permission(ctx, interact).await?;
+    check_administrator_permission(ctx, interact).await?;
 
     let admin_role = command_option!(cmd_options, 0, Role)?;
 
