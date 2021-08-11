@@ -42,6 +42,10 @@ impl ModuleExclusion {
         self.exclusions.iter().any(|e| *e == excl)
     }
 
+    pub fn len(&self) -> usize {
+        self.exclusions.len()
+    }
+
     // when a message arrives, the user info is separate from the member info so to avoid a cache/HTTP hit, separate
     // them here
     pub fn should_exclude(&self, user: &User, member: &PartialMember) -> bool {

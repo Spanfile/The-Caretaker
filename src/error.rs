@@ -41,4 +41,8 @@ pub enum ArgumentError {
     ExclusionAlreadyExists,
     #[error("No such exclusion")]
     NoSuchExclusion,
+    #[error("The module already has the maximum amount of exclusions ({0} out of {1})")]
+    ExclusionLimit(usize, usize),
+    #[error("The module already has the maximum amount of actions ({0} out of {1})")]
+    ActionLimit(usize, usize),
 }

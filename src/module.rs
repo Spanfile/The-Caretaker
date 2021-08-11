@@ -233,7 +233,7 @@ impl Module {
         Ok(())
     }
 
-    pub fn action_count(self, db: &DbConn) -> anyhow::Result<i64> {
+    pub fn action_count(self, db: &DbConn) -> anyhow::Result<usize> {
         use diesel::dsl::*;
         use schema::actions;
 
@@ -244,10 +244,10 @@ impl Module {
                     .and(actions::module.eq(self.kind)),
             )
             .select(count_star())
-            .first(db)?;
+            .first::<i64>(db)?;
 
         debug!("{:?}: # actions: {}", self, count);
-        Ok(count)
+        Ok(count as usize)
     }
 
     pub fn get_settings(self, db: &DbConn) -> anyhow::Result<ModuleSettings> {

@@ -25,6 +25,7 @@ pub enum ExclusionSubcommand {
 
 const NO_EXCLUSIONS: &str =
     "There aren't any exclusions defined for this module. They can be added with the `/module exclusion add` command.";
+const MAX_EXCLUSIONS: usize = 10;
 
 #[async_trait]
 impl SubcommandTrait for ExclusionSubcommand {
@@ -70,7 +71,12 @@ async fn get_exclusion(ctx: &Context, interact: &Interaction, module: Module) ->
         }
 
         respond_embed(ctx, interact, |e| {
-            e.title(format!("Exclusions for the `{}` module", module.kind()));
+            e.title(format!(
+                "Exclusions for the `{}` module ({} out of {})",
+                module.kind(),
+                exclusions.len(),
+                MAX_EXCLUSIONS
+            ));
 
             for (name, id) in exclusion_names.iter() {
                 e.field(name, id.to_string(), false);
@@ -88,19 +94,20 @@ async fn add_exclusion(
     cmd_options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    // TODO: limit on how many exclusions can be added
     let excl = get_exclusion_option(cmd_options)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
     let exclusions = module.get_exclusions(&db)?;
 
-    if exclusions.contains(excl) {
-        return Err(ArgumentError::ExclusionAlreadyExists.into());
+    if exclusions.len() >= MAX_EXCLUSIONS {
+        Err(ArgumentError::ExclusionLimit(exclusions.len(), MAX_EXCLUSIONS).into())
+    } else if exclusions.contains(excl) {
+        Err(ArgumentError::ExclusionAlreadyExists.into())
+    } else {
+        module.add_exclusion(excl, &db)?;
+        respond_success(ctx, interact).await
     }
-
-    module.add_exclusion(excl, &db)?;
-    respond_success(ctx, interact).await
 }
 
 async fn remove_exclusion(

@@ -19,6 +19,7 @@ use strum::EnumString;
 
 const NO_ACTIONS: &str =
     "There aren't any actions defined for this module. Add some with the `/module action add` command!";
+const MAX_ACTIONS: usize = 5;
 
 #[derive(Debug, EnumString)]
 #[strum(serialize_all = "kebab-case")]
@@ -55,7 +56,12 @@ async fn get_actions(ctx: &Context, interact: &Interaction, module: Module) -> a
         respond(ctx, interact, |m| m.content(NO_ACTIONS)).await
     } else {
         respond_embed(ctx, interact, |e| {
-            e.title(format!("Actions for the `{}` module", module.kind()));
+            e.title(format!(
+                "Actions for the `{}` module ({} out of {})",
+                module.kind(),
+                actions.len(),
+                MAX_ACTIONS
+            ));
 
             for (idx, action) in actions.into_iter().enumerate() {
                 let name = format!("{}: {}", idx, action.friendly_name());
@@ -74,8 +80,6 @@ async fn add_action(
     cmd_options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    // TODO: limit on how many actions can be added
-
     let action_kind = ActionKind::from_str(command_option!(cmd_options, 1, String)?)
         .map_err(|e| InternalError::ImpossibleCase(format!("invalid action: {:?}", e)))?;
 
@@ -84,6 +88,12 @@ async fn add_action(
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
+
+    let action_count = module.action_count(&db)?;
+    if action_count >= MAX_ACTIONS {
+        return Err(ArgumentError::ActionLimit(action_count, MAX_ACTIONS).into());
+    }
+
     let action = match action_kind {
         ActionKind::Notify => {
             if let Some(in_channel) = in_channel {
