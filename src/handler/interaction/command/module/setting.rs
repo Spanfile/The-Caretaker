@@ -9,7 +9,9 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionDataOption, Interaction},
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+    },
 };
 use strum::EnumString;
 
@@ -26,20 +28,20 @@ impl SubcommandTrait for SettingSubcommand {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
-        let module = resolve_module(ctx, interact, cmd_options).await?;
+        let module = resolve_module(ctx, interact, options).await?;
 
         match self {
             SettingSubcommand::Get => get_settings(ctx, interact, module).await,
-            SettingSubcommand::Set => set_setting(ctx, interact, cmd_options, module).await,
-            SettingSubcommand::Reset => reset_setting(ctx, interact, cmd_options, module).await,
+            SettingSubcommand::Set => set_setting(ctx, interact, options, module).await,
+            SettingSubcommand::Reset => reset_setting(ctx, interact, options, module).await,
         }
     }
 }
 
-async fn get_settings(ctx: &Context, interact: &Interaction, module: Module) -> anyhow::Result<()> {
+async fn get_settings(ctx: &Context, interact: &ApplicationCommandInteraction, module: Module) -> anyhow::Result<()> {
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
     let settings = module.get_settings(&db)?;
@@ -72,12 +74,12 @@ async fn get_settings(ctx: &Context, interact: &Interaction, module: Module) -> 
 
 async fn set_setting(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let name = command_option!(cmd_options, 1, String)?;
-    let value = command_option!(cmd_options, 2, String)?;
+    let name = command_option!(options, 1, String)?;
+    let value = command_option!(options, 2, String)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
@@ -90,11 +92,11 @@ async fn set_setting(
 
 async fn reset_setting(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let name = command_option!(cmd_options, 1, String)?;
+    let name = command_option!(options, 1, String)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;

@@ -12,7 +12,9 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionDataOption, Interaction},
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+    },
 };
 use std::{borrow::Cow, convert::TryInto, str::FromStr};
 use strum::EnumString;
@@ -34,20 +36,20 @@ impl SubcommandTrait for ActionSubcommand {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
-        let module = resolve_module(ctx, interact, cmd_options).await?;
+        let module = resolve_module(ctx, interact, options).await?;
 
         match self {
             ActionSubcommand::Get => get_actions(ctx, interact, module).await,
-            ActionSubcommand::Add => add_action(ctx, interact, cmd_options, module).await,
-            ActionSubcommand::Remove => remove_action(ctx, interact, cmd_options, module).await,
+            ActionSubcommand::Add => add_action(ctx, interact, options, module).await,
+            ActionSubcommand::Remove => remove_action(ctx, interact, options, module).await,
         }
     }
 }
 
-async fn get_actions(ctx: &Context, interact: &Interaction, module: Module) -> anyhow::Result<()> {
+async fn get_actions(ctx: &Context, interact: &ApplicationCommandInteraction, module: Module) -> anyhow::Result<()> {
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
     let actions = module.get_actions(&db)?;
@@ -76,15 +78,15 @@ async fn get_actions(ctx: &Context, interact: &Interaction, module: Module) -> a
 
 async fn add_action(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let action_kind = ActionKind::from_str(command_option!(cmd_options, 1, String)?)
+    let action_kind = ActionKind::from_str(command_option!(options, 1, String)?)
         .map_err(|e| InternalError::ImpossibleCase(format!("invalid action: {:?}", e)))?;
 
-    let message = optional_command_option!(cmd_options, 2, String)?.map(|val| val.as_str());
-    let in_channel = optional_command_option!(cmd_options, 3, Channel)?.map(|ch| ch.id);
+    let message = optional_command_option!(options, 2, String)?.map(|val| val.as_str());
+    let in_channel = optional_command_option!(options, 3, Channel)?.map(|ch| ch.id);
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
@@ -122,11 +124,11 @@ async fn add_action(
 
 async fn remove_action(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let index = *command_option!(cmd_options, 1, Integer)?;
+    let index = *command_option!(options, 1, Integer)?;
     let index = index.try_into().map_err(|_| ArgumentError::I64OutOfRange(index))?;
 
     let data = ctx.data.read().await;

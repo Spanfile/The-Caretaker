@@ -7,12 +7,9 @@ use log::*;
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandOption, CreateEmbed, CreateInteractionResponseData},
     client::Context,
-    model::{
-        guild::Member,
-        interactions::{
-            ApplicationCommand, ApplicationCommandInteractionData, ApplicationCommandOptionType, Interaction,
-            InteractionData, InteractionResponseType,
-        },
+    model::interactions::{
+        application_command::{ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandOptionType},
+        Interaction, InteractionResponseType,
     },
     utils::Colour,
 };
@@ -24,18 +21,47 @@ const UNICODE_CROSS: char = '\u{274C}';
 pub async fn build_commands(ctx: &Context) {
     info!("Registering commands for shard {}", ctx.shard_id);
 
-    match ApplicationCommand::create_global_application_commands(&ctx.http, |cmds| {
-        cmds.create_application_command(|cmd| cmd.name("status").description("Show the bot's status"))
-            .create_application_command(|cmd| cmd.name("fail").description("Deliberately returns an error"))
-            .create_application_command(|cmd| cmd.name("success").description("Responds with a success message"))
-            .create_application_command(build_module_subcommand)
-            .create_application_command(build_admin_subcommand)
-    })
-    .await
-    {
-        Ok(cmds) => trace!("{:#?}", cmds),
-        Err(e) => error!("Registering commands for shard {} failed: {:?}", ctx.shard_id, e),
+    if let Err(e) = create_application_commands(ctx).await {
+        error!("Registering commands for shard {} failed: {:?}", ctx.shard_id, e);
     }
+}
+
+async fn create_application_commands(ctx: &Context) -> anyhow::Result<()> {
+    trace!(
+        "{:?}",
+        ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
+            cmd.name("status").description("Show the bot's status")
+        })
+        .await?
+    );
+
+    trace!(
+        "{:?}",
+        ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
+            cmd.name("fail").description("Deliberately returns an error")
+        })
+        .await?
+    );
+
+    trace!(
+        "{:?}",
+        ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
+            cmd.name("success").description("Responds with a success message")
+        })
+        .await?
+    );
+
+    trace!(
+        "{:?}",
+        ApplicationCommand::create_global_application_command(&ctx.http, build_module_subcommand).await?
+    );
+
+    trace!(
+        "{:?}",
+        ApplicationCommand::create_global_application_command(&ctx.http, build_admin_subcommand).await?
+    );
+
+    Ok(())
 }
 
 fn module_option(
@@ -230,50 +256,40 @@ fn build_admin_subcommand(opt: &mut CreateApplicationCommand) -> &mut CreateAppl
 pub async fn process(ctx: Context, interact: Interaction) {
     debug!("{:?}", interact);
 
-    match interact.data {
-        Some(InteractionData::ApplicationCommand(ref cmd)) => {
-            if let Err(cmd_e) = process_command(&ctx, &interact, cmd).await {
-                if let Err(resp_e) = respond_error(&ctx, &interact, &cmd_e).await {
-                    error!("Failed responding to interaction: {:?}", resp_e);
-                }
+    if let Some(command) = interact.application_command() {
+        if let Err(cmd_e) = process_command(&ctx, &command).await {
+            if let Err(resp_e) = respond_error(&ctx, &command, &cmd_e).await {
+                error!("Failed responding to interaction: {:?}", resp_e);
             }
         }
-        Some(InteractionData::MessageComponent(_msg)) => {
-            debug!("hmm wot dis")
-        }
-        _ => (),
     }
 }
 
-async fn process_command(
-    ctx: &Context,
-    interact: &Interaction,
-    cmd: &ApplicationCommandInteractionData,
-) -> anyhow::Result<()> {
-    let (user, guild) = match (&interact.member, &interact.user) {
-        (Some(Member { user, .. }), None) => (user, interact.guild_id),
-        (None, Some(user)) => (user, None),
-        _ => {
-            error!("Error while processing command: both member and user in interact are None");
-            return Err(
-                InternalError::ImpossibleCase(String::from("both member and user in interact are None")).into(),
-            );
-        }
-    };
-
-    let command = Command::from_str(cmd.name.as_ref())
+async fn process_command(ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
+    let command = Command::from_str(interact.data.name.as_ref())
         .map_err(|e| InternalError::ImpossibleCase(format!("parsing command failed: {:?}", e)))?;
 
-    let location = if let Some(guild) = guild {
+    let location = if let Some(guild) = interact.guild_id {
         guild.to_string()
     } else {
         String::from("DM")
     };
 
-    info!("{} ({}) in {}: {:?}", user.tag(), user, location, command);
-    command.run(ctx, interact, cmd).await?;
+    info!(
+        "{} ({}) in {}: {:?}",
+        interact.user.tag(),
+        interact.user,
+        location,
+        command
+    );
+    command.run(ctx, interact).await?;
 
-    info!("{} ({}) in {}: command ran succesfully", user.tag(), user, location);
+    info!(
+        "{} ({}) in {}: command ran succesfully",
+        interact.user.tag(),
+        interact.user,
+        location
+    );
     Ok(())
 }
 
@@ -304,12 +320,12 @@ fn enabled_string(enabled: bool) -> String {
     }
 }
 
-async fn respond_success(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+async fn respond_success(ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
     respond(ctx, interact, |msg| msg.content(UNICODE_CHECK)).await?;
     Ok(())
 }
 
-async fn respond_embed<F>(ctx: &Context, interact: &Interaction, f: F) -> anyhow::Result<()>
+async fn respond_embed<F>(ctx: &Context, interact: &ApplicationCommandInteraction, f: F) -> anyhow::Result<()>
 where
     F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
 {
@@ -317,7 +333,11 @@ where
     Ok(())
 }
 
-async fn respond_error(ctx: &Context, interact: &Interaction, e: &anyhow::Error) -> anyhow::Result<()> {
+async fn respond_error(
+    ctx: &Context,
+    interact: &ApplicationCommandInteraction,
+    e: &anyhow::Error,
+) -> anyhow::Result<()> {
     respond(ctx, interact, |msg| {
         if let Some(arg_e) = e.downcast_ref::<ArgumentError>() {
             warn!("Command processing failed with argument error: {}", arg_e);
@@ -330,7 +350,7 @@ async fn respond_error(ctx: &Context, interact: &Interaction, e: &anyhow::Error)
     .await
 }
 
-async fn respond<F>(ctx: &Context, interact: &Interaction, f: F) -> anyhow::Result<()>
+async fn respond<F>(ctx: &Context, interact: &ApplicationCommandInteraction, f: F) -> anyhow::Result<()>
 where
     F: FnOnce(&mut CreateInteractionResponseData) -> &mut CreateInteractionResponseData,
 {

@@ -15,7 +15,9 @@ use log::*;
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption, Interaction},
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+    },
 };
 use std::str::FromStr;
 use strum::EnumString;
@@ -35,17 +37,17 @@ trait SubcommandTrait {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()>;
 }
 
 #[macro_export]
 macro_rules! optional_command_option {
-    ($options:ident, $index:literal, $value_type:ident) => {
-        if let Some(value) = $options.get($index).and_then(|opt| opt.resolved.as_ref()) {
+    ($data:ident, $index:literal, $value_type:ident) => {
+        if let Some(value) = $data.get($index).and_then(|opt| opt.resolved.as_ref()) {
             match value {
-                ::serenity::model::interactions::ApplicationCommandInteractionDataOptionValue::$value_type(value) => {
+                ::serenity::model::interactions::application_command::ApplicationCommandInteractionDataOptionValue::$value_type(value) => {
                     Ok(Some(value))
                 }
                 value => Err($crate::error::InternalError::ImpossibleCase(format!(
@@ -61,40 +63,35 @@ macro_rules! optional_command_option {
 
 #[macro_export]
 macro_rules! command_option {
-    ($options:ident, $index:literal, $value_type:ident) => {
-        $crate::optional_command_option!($options, $index, $value_type)?.ok_or_else(|| {
+    ($data:ident, $index:literal, $value_type:ident) => {
+        $crate::optional_command_option!($data, $index, $value_type)?.ok_or_else(|| {
             $crate::error::InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing argument"))
         })
     };
 }
 
 impl Command {
-    pub async fn run(
-        self,
-        ctx: &Context,
-        interact: &Interaction,
-        cmd: &ApplicationCommandInteractionData,
-    ) -> anyhow::Result<()> {
+    pub async fn run(self, ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
         match self {
             Command::Fail => Err(InternalError::DeliberateError.into()),
             Command::Success => respond_success(ctx, interact).await,
             Command::Status => status_command(ctx, interact).await,
-            Command::Module => run_subcommand::<ModuleSubcommand>(ctx, interact, &cmd.options).await,
-            Command::SetAdminRole => set_admin_role(ctx, interact, &cmd.options).await,
+            Command::Module => run_subcommand::<ModuleSubcommand>(ctx, interact, &interact.data.options).await,
+            Command::SetAdminRole => set_admin_role(ctx, interact, &interact.data.options).await,
         }
     }
 }
 
 async fn run_subcommand<S>(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<()>
 where
     S: SubcommandTrait + FromStr,
     <S as FromStr>::Err: std::fmt::Debug,
 {
-    let (subcommand, sub) = cmd_options
+    let (subcommand, sub) = options
         .first()
         .ok_or_else(|| InternalError::ImpossibleCase(String::from("parsing subcommand failed: missing subcommand")))
         .and_then(|sub| {
@@ -105,7 +102,7 @@ where
     subcommand.run(ctx, interact, &sub.options).await
 }
 
-async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+async fn check_permission(ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
     let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
     let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
 
@@ -140,7 +137,7 @@ async fn check_permission(ctx: &Context, interact: &Interaction) -> anyhow::Resu
     }
 }
 
-async fn check_administrator_permission(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+async fn check_administrator_permission(ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
     let guild_id = interact.guild_id.ok_or(ArgumentError::NotSupportedInDM)?;
     let member = interact.member.as_ref().ok_or(ArgumentError::NotSupportedInDM)?;
 
@@ -161,7 +158,7 @@ async fn check_administrator_permission(ctx: &Context, interact: &Interaction) -
     }
 }
 
-async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result<()> {
+async fn status_command(ctx: &Context, interact: &ApplicationCommandInteraction) -> anyhow::Result<()> {
     let data = ctx.data.read().await;
     let shards = data.get_userdata::<ShardMetadata>()?;
     let latency = data.get_userdata::<LatencyCounter>()?;
@@ -222,12 +219,12 @@ async fn status_command(ctx: &Context, interact: &Interaction) -> anyhow::Result
 
 async fn set_admin_role(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<()> {
     check_administrator_permission(ctx, interact).await?;
 
-    let admin_role = command_option!(cmd_options, 0, Role)?;
+    let admin_role = command_option!(options, 0, Role)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;

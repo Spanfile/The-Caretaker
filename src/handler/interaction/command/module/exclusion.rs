@@ -8,9 +8,9 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::{
-        interactions::{ApplicationCommandInteractionDataOption, Interaction},
-        prelude::*,
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+        ApplicationCommandInteractionDataOptionValue,
     },
 };
 use strum::EnumString;
@@ -32,20 +32,20 @@ impl SubcommandTrait for ExclusionSubcommand {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
-        let module = resolve_module(ctx, interact, cmd_options).await?;
+        let module = resolve_module(ctx, interact, options).await?;
 
         match self {
             ExclusionSubcommand::Get => get_exclusion(ctx, interact, module).await,
-            ExclusionSubcommand::Add => add_exclusion(ctx, interact, cmd_options, module).await,
-            ExclusionSubcommand::Remove => remove_exclusion(ctx, interact, cmd_options, module).await,
+            ExclusionSubcommand::Add => add_exclusion(ctx, interact, options, module).await,
+            ExclusionSubcommand::Remove => remove_exclusion(ctx, interact, options, module).await,
         }
     }
 }
 
-async fn get_exclusion(ctx: &Context, interact: &Interaction, module: Module) -> anyhow::Result<()> {
+async fn get_exclusion(ctx: &Context, interact: &ApplicationCommandInteraction, module: Module) -> anyhow::Result<()> {
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
     let exclusions = module.get_exclusions(&db)?;
@@ -90,11 +90,11 @@ async fn get_exclusion(ctx: &Context, interact: &Interaction, module: Module) ->
 
 async fn add_exclusion(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let excl = get_exclusion_option(cmd_options)?;
+    let excl = get_exclusion_option(options)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
@@ -112,11 +112,11 @@ async fn add_exclusion(
 
 async fn remove_exclusion(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
     module: Module,
 ) -> anyhow::Result<()> {
-    let excl = get_exclusion_option(cmd_options)?;
+    let excl = get_exclusion_option(options)?;
 
     let data = ctx.data.read().await;
     let db = data.get_userdata::<DbPool>()?.get()?;
@@ -130,9 +130,9 @@ async fn remove_exclusion(
     }
 }
 
-fn get_exclusion_option(cmd_options: &[ApplicationCommandInteractionDataOption]) -> Result<Exclusion, InternalError> {
+fn get_exclusion_option(options: &[ApplicationCommandInteractionDataOption]) -> Result<Exclusion, InternalError> {
     // have to do the option retrieval by hand since the command_option! macro only does one kind of option, not two
-    cmd_options
+    options
         .get(1)
         .and_then(|opt| opt.resolved.as_ref())
         .map(|value| match value {

@@ -18,8 +18,9 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{
-        ApplicationCommandInteractionDataOption, ApplicationCommandInteractionDataOptionValue, Interaction,
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+        ApplicationCommandInteractionDataOptionValue,
     },
 };
 use std::str::FromStr;
@@ -39,26 +40,26 @@ impl SubcommandTrait for ModuleSubcommand {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
         check_permission(ctx, interact).await?;
 
         match self {
-            ModuleSubcommand::Enabled => run_subcommand::<EnabledSubcommand>(ctx, interact, cmd_options).await,
-            ModuleSubcommand::Action => run_subcommand::<ActionSubcommand>(ctx, interact, cmd_options).await,
-            ModuleSubcommand::Setting => run_subcommand::<SettingSubcommand>(ctx, interact, cmd_options).await,
-            ModuleSubcommand::Exclusion => run_subcommand::<ExclusionSubcommand>(ctx, interact, cmd_options).await,
+            ModuleSubcommand::Enabled => run_subcommand::<EnabledSubcommand>(ctx, interact, options).await,
+            ModuleSubcommand::Action => run_subcommand::<ActionSubcommand>(ctx, interact, options).await,
+            ModuleSubcommand::Setting => run_subcommand::<SettingSubcommand>(ctx, interact, options).await,
+            ModuleSubcommand::Exclusion => run_subcommand::<ExclusionSubcommand>(ctx, interact, options).await,
         }
     }
 }
 
 async fn resolve_optional_module(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<Option<Module>> {
-    let kind_option = if let Some(opt) = cmd_options.first().and_then(|opt| opt.resolved.as_ref()) {
+    let kind_option = if let Some(opt) = options.first().and_then(|opt| opt.resolved.as_ref()) {
         Result::<_, anyhow::Error>::Ok(opt)
     } else {
         return Ok(None);
@@ -87,10 +88,10 @@ async fn resolve_optional_module(
 
 async fn resolve_module(
     ctx: &Context,
-    interact: &Interaction,
-    cmd_options: &[ApplicationCommandInteractionDataOption],
+    interact: &ApplicationCommandInteraction,
+    options: &[ApplicationCommandInteractionDataOption],
 ) -> anyhow::Result<Module> {
-    match resolve_optional_module(ctx, interact, cmd_options).await? {
+    match resolve_optional_module(ctx, interact, options).await? {
         Some(module) => Ok(module),
         None => Err(InternalError::ImpossibleCase(String::from(
             "parsing module setting subcommand failed: missing module value",

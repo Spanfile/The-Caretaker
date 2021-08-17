@@ -11,7 +11,9 @@ use crate::{
 use serenity::{
     async_trait,
     client::Context,
-    model::interactions::{ApplicationCommandInteractionDataOption, Interaction},
+    model::interactions::application_command::{
+        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+    },
 };
 use strum::EnumString;
 
@@ -27,12 +29,12 @@ impl SubcommandTrait for EnabledSubcommand {
     async fn run(
         self,
         ctx: &Context,
-        interact: &Interaction,
-        cmd_options: &[ApplicationCommandInteractionDataOption],
+        interact: &ApplicationCommandInteraction,
+        options: &[ApplicationCommandInteractionDataOption],
     ) -> anyhow::Result<()> {
         match self {
             EnabledSubcommand::Get => {
-                if let Some(module) = resolve_optional_module(ctx, interact, cmd_options).await? {
+                if let Some(module) = resolve_optional_module(ctx, interact, options).await? {
                     respond(ctx, interact, |m| {
                         m.content(format!(
                             "The `{}` module is: {}",
@@ -61,8 +63,8 @@ impl SubcommandTrait for EnabledSubcommand {
                 }
             }
             EnabledSubcommand::Set => {
-                let mut module = resolve_module(ctx, interact, cmd_options).await?;
-                let enabled = *command_option!(cmd_options, 1, Boolean)?;
+                let mut module = resolve_module(ctx, interact, options).await?;
+                let enabled = *command_option!(options, 1, Boolean)?;
 
                 let data = ctx.data.read().await;
                 let db = data.get_userdata::<DbPool>()?.get()?;
