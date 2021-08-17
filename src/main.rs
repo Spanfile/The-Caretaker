@@ -34,7 +34,7 @@ mod migrations {
 }
 
 use chrono::{DateTime, Utc};
-use config::Config;
+use config::{Config, DatabaseConfig};
 use diesel::{
     pg::PgConnection,
     r2d2::{ConnectionManager, Pool, PooledConnection},
@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting Caretaker version {} at {}", VERSION, start_time);
     debug!("{:#?}", config);
 
-    let db_pool = build_db_pool(&config.database_url)?;
+    let db_pool = build_db_pool(&config.database)?;
     let module_cache = ModuleCache::populate_from_db(&db_pool.get()?)?;
 
     let (msg_tx, _) = broadcast::channel(64);
@@ -106,12 +106,13 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn build_db_pool(url: &str) -> anyhow::Result<Pool<ConnectionManager<PgConnection>>> {
-    info!("Establishing pooled database connection to {}...", url);
+fn build_db_pool(config: &DatabaseConfig) -> anyhow::Result<Pool<ConnectionManager<PgConnection>>> {
+    info!("Establishing pooled database connection to {}...", config);
 
     let builder = Pool::builder();
     debug!("{:#?}", builder);
 
+    let url = config.construct_database_url();
     let pool = builder.build(ConnectionManager::new(url))?;
     info!(
         "Database connection established. Total connections: {}",

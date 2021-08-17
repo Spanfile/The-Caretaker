@@ -27,40 +27,24 @@ pub async fn build_commands(ctx: &Context) {
 }
 
 async fn create_application_commands(ctx: &Context) -> anyhow::Result<()> {
-    trace!(
-        "{:?}",
+    let cmds = vec![
         ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
             cmd.name("status").description("Show the bot's status")
         })
-        .await?
-    );
-
-    trace!(
-        "{:?}",
+        .await?,
         ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
             cmd.name("fail").description("Deliberately returns an error")
         })
-        .await?
-    );
-
-    trace!(
-        "{:?}",
+        .await?,
         ApplicationCommand::create_global_application_command(&ctx.http, |cmd| {
             cmd.name("success").description("Responds with a success message")
         })
-        .await?
-    );
+        .await?,
+        ApplicationCommand::create_global_application_command(&ctx.http, build_module_subcommand).await?,
+        ApplicationCommand::create_global_application_command(&ctx.http, build_admin_subcommand).await?,
+    ];
 
-    trace!(
-        "{:?}",
-        ApplicationCommand::create_global_application_command(&ctx.http, build_module_subcommand).await?
-    );
-
-    trace!(
-        "{:?}",
-        ApplicationCommand::create_global_application_command(&ctx.http, build_admin_subcommand).await?
-    );
-
+    trace!("Registered commands: {:#?}", cmds);
     Ok(())
 }
 
